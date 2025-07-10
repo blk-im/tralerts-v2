@@ -31,8 +31,8 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   useEffect(() => {
     fetchNews();
     
-    // Rafraîchir les actualités toutes les 5 minutes
-    const interval = setInterval(fetchNews, 30 * 1000);
+    // Rafraîchir les actualités toutes les 30 secondes
+    const interval = setInterval(fetchNews, 30 * 1000); 
     setRefreshInterval(interval);
     
     return () => {
@@ -43,95 +43,64 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const fetchNews = async () => {
     setLoading(true);
     
+    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+    if (!apiKey) {
+      console.error('Finnhub API key not found');
+      setNews(getFallbackNews());
+      setLoading(false);
+      return;
+    }
+    
     try {
-      // Récupérer les actualités crypto récentes depuis CryptoCompare
-      const cryptoResponse = await fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=latest');
+      // Récupérer les actualités crypto et actions depuis Finnhub
+      const cryptoNewsResponse = await fetch(`https://finnhub.io/api/v1/news?category=crypto&token=${apiKey}`);
+      const stockNewsResponse = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${apiKey}`);
       
-      let cryptoNews: NewsItem[] = [];
+      let allNews: NewsItem[] = [];
       
-      if (cryptoResponse.ok) {
-        const cryptoData = await cryptoResponse.json();
-        const newsData = cryptoData.Data || [];
+      if (cryptoNewsResponse.ok) {
+        const cryptoNewsData = await cryptoNewsResponse.json();
         
         // Transformer les données en format NewsItem
-        cryptoNews = newsData.map((item: any, index: number) => ({
-          id: `crypto-${index}`,
-          title: item.title,
-          summary: item.body || 'Actualité crypto récente',
-          source: item.source || 'CryptoCompare',
-          publishedAt: new Date(item.published_on * 1000).toISOString(),
+        const cryptoNews = cryptoNewsData.slice(0, 10).map((item: any, index: number) => ({
+          id: `crypto-${item.id || index}`,
+          title: item.headline,
+          summary: item.summary || 'Actualité crypto récente',
+          source: item.source || 'Finnhub',
+          publishedAt: new Date(item.datetime * 1000).toISOString(),
           url: item.url,
           category: 'crypto',
-          sentiment: getSentiment(item.title),
-          impact: getImpact(item.title)
+          sentiment: getSentiment(item.headline),
+          impact: getImpact(item.headline)
         }));
+        
+        allNews = [...allNews, ...cryptoNews];
       }
       
-      // Actualités boursières récentes (données réelles)
-      const stockNews: NewsItem[] = [
-        {
-          id: 'stock-1',
-          title: 'Apple dévoile l\'iPhone 16 avec des fonctionnalités IA avancées',
-          summary: 'Apple a présenté sa nouvelle gamme iPhone 16 avec des capacités d\'intelligence artificielle améliorées et un nouveau processeur A18.',
-          source: 'Les Echos',
-          publishedAt: new Date().toISOString(),
-          url: 'https://www.lesechos.fr/tech-medias/hightech/apple-devoile-son-casque-vision-pro-disponible-des-le-2-fevrier-1992187',
-          category: 'stock',
-          sentiment: 'positive',
-          impact: 'high'
-        },
-        {
-          id: 'stock-2',
-          title: 'Nvidia annonce sa nouvelle génération de GPU Blackwell pour l\'IA',
-          summary: 'Nvidia a dévoilé sa nouvelle architecture GPU Blackwell, promettant des performances d\'IA multipliées par 4 par rapport à la génération précédente.',
-          source: 'Bloomberg',
-          publishedAt: new Date().toISOString(),
-          url: 'https://www.bloomberg.com/news/articles/2024-06-18/nvidia-tops-3-trillion-in-market-value-as-ai-rally-accelerates',
-          category: 'stock',
-          sentiment: 'positive',
-          impact: 'high'
-        },
-        {
-          id: 'stock-3',
-          title: 'Tesla dévoile son nouveau Cybertruck avec une autonomie améliorée',
-          summary: 'Tesla a présenté une version améliorée de son Cybertruck avec une autonomie de 800 km et de nouvelles fonctionnalités de conduite autonome.',
-          source: 'Reuters',
-          publishedAt: new Date().toISOString(),
-          url: 'https://www.reuters.com/business/autos-transportation/tesla-cuts-prices-china-amid-competition-2024-06-24/',
-          category: 'stock',
-          sentiment: 'negative',
-          impact: 'medium'
-        }
-      ];
+      if (stockNewsResponse.ok) {
+        const stockNewsData = await stockNewsResponse.json();
+        
+        // Transformer les données en format NewsItem
+        const stockNews = stockNewsData.slice(0, 10).map((item: any, index: number) => ({
+          id: `stock-${item.id || index}`,
+          title: item.headline,
+          summary: item.summary || 'Actualité boursière récente',
+          source: item.source || 'Finnhub',
+          publishedAt: new Date(item.datetime * 1000).toISOString(),
+          url: item.url,
+          category: item.category === 'crypto' ? 'crypto' : 'stock',
+          sentiment: getSentiment(item.headline),
+          impact: getImpact(item.headline)
+        }));
+        
+        allNews = [...allNews, ...stockNews];
+      }
       
-      // Actualités économiques générales
-      const generalNews: NewsItem[] = [
-        {
-          id: 'general-1',
-          title: 'La BCE annonce une baisse des taux directeurs de 0,25 points',
-          summary: 'La Banque centrale européenne a annoncé aujourd\'hui une baisse de ses taux directeurs de 0,25 points, la première depuis plusieurs années.',
-          source: 'Financial Times',
-          publishedAt: new Date().toISOString(),
-          url: 'https://www.ft.com/content/3f7b2a5a-f5a0-4b5a-9d5a-188e7df526f9',
-          category: 'general',
-          sentiment: 'neutral',
-          impact: 'high'
-        },
-        {
-          id: 'general-2',
-          title: 'L\'inflation mondiale atteint son plus bas niveau depuis 3 ans',
-          summary: 'L\'inflation mondiale est tombée à son niveau le plus bas depuis 3 ans, selon les dernières données publiées par le FMI.',
-          source: 'Eurostat',
-          publishedAt: new Date().toISOString(),
-          url: 'https://ec.europa.eu/eurostat/web/main',
-          category: 'general',
-          sentiment: 'positive',
-          impact: 'medium'
-        }
-      ];
-      
-      // Combiner toutes les actualités
-      const allNews = [...cryptoNews, ...stockNews, ...generalNews];
+      // Ajouter quelques actualités économiques générales si nécessaire
+      if (allNews.length < 5) {
+        const generalNews = getGeneralNews();
+        allNews = [...allNews, ...generalNews];
+      }
       
       // Trier par date de publication (plus récentes en premier)
       allNews.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
@@ -144,6 +113,34 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Actualités économiques générales de secours
+  const getGeneralNews = (): NewsItem[] => {
+    return [
+      {
+        id: 'general-1',
+        title: 'La BCE annonce une baisse des taux directeurs de 0,25 points',
+        summary: 'La Banque centrale européenne a annoncé aujourd\'hui une baisse de ses taux directeurs de 0,25 points, la première depuis plusieurs années.',
+        source: 'Financial Times',
+        publishedAt: new Date().toISOString(),
+        url: 'https://www.ft.com/content/3f7b2a5a-f5a0-4b5a-9d5a-188e7df526f9',
+        category: 'general',
+        sentiment: 'neutral',
+        impact: 'high'
+      },
+      {
+        id: 'general-2',
+        title: 'L\'inflation mondiale atteint son plus bas niveau depuis 3 ans',
+        summary: 'L\'inflation mondiale est tombée à son niveau le plus bas depuis 3 ans, selon les dernières données publiées par le FMI.',
+        source: 'Eurostat',
+        publishedAt: new Date().toISOString(),
+        url: 'https://ec.europa.eu/eurostat/web/main',
+        category: 'general',
+        sentiment: 'positive',
+        impact: 'medium'
+      }
+    ];
   };
 
   // Déterminer le sentiment d'une actualité

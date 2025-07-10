@@ -27,15 +27,34 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
   const fetchRealIndicators = async (symbol) => {
     setLoading(true);
     
+    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+    if (!apiKey) {
+      console.error('Finnhub API key not found');
+      simulateIndicators(symbol);
+      setLoading(false);
+      return;
+    }
+    
     try {
-      // Récupérer des données réelles pour Bitcoin
-      if (symbol === 'BTC') {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=30&x_cg_demo_api_key=CG-Demo');
-        if (response.ok) {
-          const data = await response.json();
-          
-          // Calculer des indicateurs techniques réels basés sur les données
-          const prices = data.prices.map(p => p[1]);
+      // Déterminer si c'est une crypto ou une action
+      const isCrypto = ['BTC', 'ETH', 'ADA', 'SOL'].includes(symbol);
+      
+      // Construire le symbole pour Finnhub
+      const finnhubSymbol = isCrypto 
+        ? `BINANCE:${symbol}USDT` 
+        : symbol;
+      
+      // Récupérer les données de chandeliers
+      const candleResponse = await fetch(
+        `https://finnhub.io/api/v1/${isCrypto ? 'crypto' : 'stock'}/candle?symbol=${finnhubSymbol}&resolution=D&count=30&token=${apiKey}`
+      );
+      
+      if (candleResponse.ok) {
+        const candleData = await candleResponse.json();
+        
+        if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
+          // Extraire les prix de clôture
+          const prices = candleData.c;
           
           // Calculer RSI (Relative Strength Index)
           const rsi = calculateRSI(prices);
@@ -45,6 +64,19 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
           
           // Calculer Bollinger Bands
           const bollinger = calculateBollingerBands(prices);
+          
+          // Récupérer le prix actuel
+          const quoteResponse = await fetch(
+            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${apiKey}`
+          );
+          
+          let currentPrice = prices[prices.length - 1];
+          if (quoteResponse.ok) {
+            const quoteData = await quoteResponse.json();
+            if (quoteData.c) {
+              currentPrice = quoteData.c;
+            }
+          }
           
           // Mettre à jour les indicateurs
           setIndicators([
@@ -95,12 +127,12 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
           // Générer des signaux basés sur les indicateurs
           setSignals([
             {
-              symbol: 'BTC',
+              symbol: symbol,
               signal: rsi < 30 ? 'Achat Fort' : rsi > 70 ? 'Vente' : macd.histogram > 0 ? 'Achat' : 'Neutre',
               confidence: rsi < 30 || rsi > 70 ? 85 : 65,
-              price: prices[prices.length - 1],
-              target: prices[prices.length - 1] * (rsi < 30 ? 1.1 : rsi > 70 ? 0.9 : macd.histogram > 0 ? 1.05 : 1),
-              stopLoss: prices[prices.length - 1] * (rsi < 30 ? 0.95 : rsi > 70 ? 1.05 : macd.histogram > 0 ? 0.97 : 1),
+              price: currentPrice,
+              target: currentPrice * (rsi < 30 ? 1.1 : rsi > 70 ? 0.9 : macd.histogram > 0 ? 1.05 : 1),
+              stopLoss: currentPrice * (rsi < 30 ? 0.95 : rsi > 70 ? 1.05 : macd.histogram > 0 ? 0.97 : 1),
               timeframe: '4H',
               color: rsi < 30 || macd.histogram > 0 ? 'green' : rsi > 70 ? 'red' : 'blue',
               reason: rsi < 30 ? 'RSI en survente + volume en hausse' : 
@@ -112,18 +144,19 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
           // Détecter des patterns
           setPatterns([
             { 
-              name: detectPattern(prices), 
-              symbol: 'BTC', 
+              name: detectPattern(prices),
+              symbol: symbol,
               probability: Math.floor(Math.random() * 20) + 60, 
               direction: rsi < 40 ? 'Haussier' : rsi > 60 ? 'Baissier' : 'Neutre', 
               timeframe: '4H' 
             }
           ]);
+        } else {
+          throw new Error(`Invalid candle data for ${symbol}`);
         }
       } else {
-        // Pour les autres symboles, utiliser des données simulées mais réalistes
-        simulateIndicators(symbol);
-      }
+        throw new Error(`Failed to fetch candle data for ${symbol}`);
+        }
     } catch (error) {
       console.error('Error fetching technical data:', error);
       simulateIndicators(symbol);

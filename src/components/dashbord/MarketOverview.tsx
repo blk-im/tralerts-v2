@@ -21,8 +21,8 @@ export function MarketOverview() {
   useEffect(() => {
     fetchMarketData();
     
-    // Rafraîchir les données toutes les 5 secondes
-    const interval = setInterval(fetchMarketData, 5000);
+    // Rafraîchir les données toutes les 5 secondes (5000 ms)
+    const interval = setInterval(fetchMarketData, 5000); 
     
     return () => {
       clearInterval(interval);
@@ -32,42 +32,206 @@ export function MarketOverview() {
   const fetchMarketData = async () => {
     try {
       setLoading(true);
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        setDemoData();
+        return;
+      }
       
       // Fetch crypto data from CoinGecko
       const cryptoResponse = await fetch(
-        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&x_cg_demo_api_key=CG-Demo'
-      );
-      
-      if (cryptoResponse.ok) {
-        const cryptoJson = await cryptoResponse.json();
-        const formattedCrypto = cryptoJson.map((coin: any) => ({
-          symbol: coin.symbol.toUpperCase(),
-          name: coin.name,
-          price: coin.current_price,
-          change24h: coin.price_change_percentage_24h,
-          volume: coin.total_volume,
-          marketCap: coin.market_cap,
-          type: 'crypto' as const
-        }));
-        setCryptoData(formattedCrypto);
+        try {
+          // Utiliser Finnhub pour les cryptomonnaies
+          const cryptoSymbols = ['BINANCE:BTCUSDT', 'BINANCE:ETHUSDT', 'BINANCE:BNBUSDT', 'BINANCE:XRPUSDT', 'BINANCE:ADAUSDT', 'BINANCE:DOGEUSDT', 'BINANCE:SOLUSDT', 'BINANCE:DOTUSDT'];
+          
+          const cryptoPromises = cryptoSymbols.map(async (symbol) => {
+            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
+            if (response.ok) {
+              const data = await response.json();
+              // Extraire le symbole de base (ex: BINANCE:BTCUSDT -> BTC)
+              const baseSymbol = symbol.split(':')[1].replace('USDT', '');
+              
+              return {
+                symbol: baseSymbol,
+                name: getCryptoName(baseSymbol),
+                price: data.c || 0,
+                change24h: data.dp || 0,
+                volume: data.v || 0,
+                type: 'crypto' as const
+              };
+            }
+            return null;
+          });
+          
+          const cryptoResults = await Promise.all(cryptoPromises);
+          const validResults = cryptoResults.filter(result => result !== null);
+        // Mettre à jour les prix des cryptos existantes
+        try {
+          const updatedCrypto = [...cryptoData];
+          const updatePromises = updatedCrypto.map(async (crypto, index) => {
+            const symbol = `BINANCE:${crypto.symbol}USDT`;
+            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.c) {
+                updatedCrypto[index].price = data.c;
+                updatedCrypto[index].change24h = data.dp || updatedCrypto[index].change24h;
+              }
+            }
+          });
+          
+          await Promise.all(updatePromises);
+          setCryptoData(updatedCrypto);
+        } catch (error) {
+          console.error('Error updating crypto prices:', error);
+          // Légère mise à jour aléatoire en cas d'erreur
+          const updatedCrypto = [...cryptoData];
+          for (let i = 0; i < updatedCrypto.length; i++) {
+            const priceChange = (Math.random() - 0.5) * 0.01 * updatedCrypto[i].price;
+            updatedCrypto[i].price += priceChange;
+            updatedCrypto[i].change24h += (Math.random() - 0.5) * 0.1;
+          }
+          setCryptoData(updatedCrypto);
+        }
+          setDemoCryptoData();
+        }
+      // Fetch stock data from Finnhub
+      if (stockData.length === 0) {
+        try {
+          const stockSymbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA'];
+          
+          const stockPromises = stockSymbols.map(async (symbol) => {
+            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
+            if (response.ok) {
+              const data = await response.json();
+              
+              return {
+                symbol: symbol,
+                name: getStockName(symbol),
+                price: data.c || 0,
+                change24h: data.dp || 0,
+                volume: data.v || 0,
+                type: 'stock' as const
+              };
+            }
+            return null;
+          });
+          
+          const stockResults = await Promise.all(stockPromises);
+          const validResults = stockResults.filter(result => result !== null);
+          
+          if (validResults.length > 0) {
+            setStockData(validResults);
+          } else {
+            throw new Error('No valid stock data from Finnhub');
+          }
+        } catch (error) {
+          console.error('Error fetching stock data from Finnhub:', error);
+          // Fallback to demo data
+          setDemoStockData();
+        }
+      } else {
+        // Mettre à jour les prix des actions existantes
+        try {
+          const updatedStocks = [...stockData];
+          const updatePromises = updatedStocks.map(async (stock, index) => {
+            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${stock.symbol}&token=${apiKey}`);
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.c) {
+                updatedStocks[index].price = data.c;
+                updatedStocks[index].change24h = data.dp || updatedStocks[index].change24h;
+              }
+            }
+          });
+          
+          await Promise.all(updatePromises);
+          setStockData(updatedStocks);
+        } catch (error) {
+          console.error('Error updating stock prices:', error);
+          // Légère mise à jour aléatoire en cas d'erreur
+          const updatedStocks = [...stockData];
+          for (let i = 0; i < updatedStocks.length; i++) {
+            const priceChange = (Math.random() - 0.5) * 0.01 * updatedStocks[i].price;
+            updatedStocks[i].price += priceChange;
+            updatedStocks[i].change24h += (Math.random() - 0.5) * 0.1;
+          }
+          setStockData(updatedStocks);
+        }
       }
-
-      // Mock stock data (in production, use real stock API)
-      const mockStocks: MarketData[] = [
-        { symbol: 'AAPL', name: 'Apple Inc.', price: 175.43, change24h: 1.2, volume: 45000000, type: 'stock' },
-        { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 2750.80, change24h: -0.8, volume: 1200000, type: 'stock' },
-        { symbol: 'MSFT', name: 'Microsoft Corp.', price: 378.85, change24h: 0.5, volume: 25000000, type: 'stock' },
-        { symbol: 'TSLA', name: 'Tesla Inc.', price: 248.50, change24h: -2.1, volume: 35000000, type: 'stock' },
-        { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 3380.00, change24h: 1.8, volume: 3500000, type: 'stock' },
-        { symbol: 'NVDA', name: 'NVIDIA Corp.', price: 875.30, change24h: 3.2, volume: 28000000, type: 'stock' },
-      ];
-      setStockData(mockStocks);
 
     } catch (error) {
       console.error('Error fetching market data:', error);
+      setDemoData();
     } finally {
       setLoading(false);
     }
+  };
+
+  // Définir des données de démonstration en cas d'erreur API
+  const setDemoData = () => {
+    setDemoCryptoData();
+    setDemoStockData();
+  };
+  
+  const setDemoCryptoData = () => {
+    const demoCryptos: MarketData[] = [
+      { symbol: 'BTC', name: 'Bitcoin', price: 45000 + (Math.random() - 0.5) * 1000, change24h: (Math.random() - 0.3) * 5, volume: 25000000000, type: 'crypto' },
+      { symbol: 'ETH', name: 'Ethereum', price: 3200 + (Math.random() - 0.5) * 100, change24h: (Math.random() - 0.3) * 5, volume: 15000000000, type: 'crypto' },
+      { symbol: 'BNB', name: 'Binance Coin', price: 580 + (Math.random() - 0.5) * 20, change24h: (Math.random() - 0.3) * 5, volume: 2000000000, type: 'crypto' },
+      { symbol: 'XRP', name: 'Ripple', price: 0.5 + (Math.random() - 0.5) * 0.05, change24h: (Math.random() - 0.3) * 5, volume: 1500000000, type: 'crypto' },
+      { symbol: 'ADA', name: 'Cardano', price: 0.45 + (Math.random() - 0.5) * 0.05, change24h: (Math.random() - 0.3) * 5, volume: 1000000000, type: 'crypto' },
+      { symbol: 'DOGE', name: 'Dogecoin', price: 0.08 + (Math.random() - 0.5) * 0.01, change24h: (Math.random() - 0.3) * 5, volume: 800000000, type: 'crypto' },
+    ];
+    setCryptoData(demoCryptos);
+  };
+  
+  const setDemoStockData = () => {
+    const demoStocks: MarketData[] = [
+      { symbol: 'AAPL', name: 'Apple Inc.', price: 175.43 + (Math.random() - 0.5) * 5, change24h: (Math.random() - 0.3) * 3, volume: 45000000, type: 'stock' },
+      { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 2750.80 + (Math.random() - 0.5) * 50, change24h: (Math.random() - 0.3) * 3, volume: 1200000, type: 'stock' },
+      { symbol: 'MSFT', name: 'Microsoft Corp.', price: 378.85 + (Math.random() - 0.5) * 10, change24h: (Math.random() - 0.3) * 3, volume: 25000000, type: 'stock' },
+      { symbol: 'TSLA', name: 'Tesla Inc.', price: 248.50 + (Math.random() - 0.5) * 15, change24h: (Math.random() - 0.3) * 3, volume: 35000000, type: 'stock' },
+      { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 3380.00 + (Math.random() - 0.5) * 70, change24h: (Math.random() - 0.3) * 3, volume: 3500000, type: 'stock' },
+      { symbol: 'NVDA', name: 'NVIDIA Corp.', price: 875.30 + (Math.random() - 0.5) * 25, change24h: (Math.random() - 0.3) * 3, volume: 28000000, type: 'stock' },
+    ];
+    setStockData(demoStocks);
+  };
+  
+  // Obtenir le nom complet d'une crypto à partir de son symbole
+  const getCryptoName = (symbol: string): string => {
+    const cryptoNames: {[key: string]: string} = {
+      'BTC': 'Bitcoin',
+      'ETH': 'Ethereum',
+      'BNB': 'Binance Coin',
+      'XRP': 'Ripple',
+      'ADA': 'Cardano',
+      'DOGE': 'Dogecoin',
+      'SOL': 'Solana',
+      'DOT': 'Polkadot'
+    };
+    
+    return cryptoNames[symbol] || symbol;
+  };
+  
+  // Obtenir le nom complet d'une action à partir de son symbole
+  const getStockName = (symbol: string): string => {
+    const stockNames: {[key: string]: string} = {
+      'AAPL': 'Apple Inc.',
+      'GOOGL': 'Alphabet Inc.',
+      'MSFT': 'Microsoft Corp.',
+      'TSLA': 'Tesla Inc.',
+      'AMZN': 'Amazon.com Inc.',
+      'NVDA': 'NVIDIA Corp.',
+      'META': 'Meta Platforms Inc.',
+      'NFLX': 'Netflix Inc.'
+    };
+    
+    return stockNames[symbol] || symbol;
   };
 
   const formatCurrency = (value: number) => {

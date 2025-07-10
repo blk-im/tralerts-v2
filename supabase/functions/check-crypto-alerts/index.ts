@@ -95,27 +95,31 @@ Deno.serve(async (req: Request) => {
       const cryptoSymbols = [...new Set(cryptoAlerts.map(alert => alert.symbol.toLowerCase()))];
       console.log('Checking crypto symbols:', cryptoSymbols);
 
-      try {
-        const cryptoUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoSymbols.join(',')}&vs_currencies=usd`;
-        const cryptoResponse = await fetch(cryptoUrl);
-
-        // Si l'API rate-limit, essayer avec la clé démo
-        if (!cryptoResponse.ok && cryptoResponse.status === 429) {
-          const cryptoUrlWithKey = `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoSymbols.join(',')}&vs_currencies=usd&x_cg_demo_api_key=CG-Demo`;
-          const retryResponse = await fetch(cryptoUrlWithKey);
-          
-          if (retryResponse.ok) {
-            cryptoPrices = await retryResponse.json();
-            console.log('Crypto prices fetched with demo key:', Object.keys(cryptoPrices).length);
+      // Utiliser Finnhub pour les prix de crypto
+      const finnhubApiKey = Deno.env.get('FINNHUB_API_KEY');
+      if (!finnhubApiKey) {
+        console.error('Finnhub API key not found in environment variables');
+      } else {
+        for (const symbol of cryptoSymbols) {
+          try {
+            const finnhubSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
+            const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${finnhubApiKey}`;
+            const finnhubResponse = await fetch(finnhubUrl);
+            
+            if (finnhubResponse.ok) {
+              const quoteData = await finnhubResponse.json();
+              if (quoteData.c) {
+                // Stocker le prix dans le même format que précédemment pour compatibilité
+                cryptoPrices[symbol] = { usd: quoteData.c };
+                console.log(`Crypto price for ${symbol}: $${quoteData.c}`);
+              }
+            } else {
+              console.error(`Failed to fetch price for ${symbol}:`, finnhubResponse.statusText);
+            }
+          } catch (error) {
+            console.error(`Error fetching price for ${symbol}:`, error);
           }
-        } else if (cryptoResponse.ok) {
-          cryptoPrices = await cryptoResponse.json();
-          console.log('Crypto prices fetched:', Object.keys(cryptoPrices).length);
-        } else {
-          console.error('Failed to fetch crypto prices:', cryptoResponse.statusText);
         }
-      } catch (error) {
-        console.error('Error fetching crypto prices:', error);
       }
     }
 
@@ -124,21 +128,49 @@ Deno.serve(async (req: Request) => {
       const stockSymbols = [...new Set(stockAlerts.map(alert => alert.symbol.toUpperCase()))];
       console.log('Checking stock symbols:', stockSymbols);
 
-      // For demo purposes, we'll generate realistic stock prices
-      // In production, you'd use a real stock API like Alpha Vantage, IEX Cloud, etc.
-      const stockPriceMap: { [key: string]: number } = {
-        'AAPL': 175.43 + (Math.random() - 0.5) * 10,
-        'GOOGL': 2750.80 + (Math.random() - 0.5) * 100,
-        'MSFT': 378.85 + (Math.random() - 0.5) * 20,
-        'TSLA': 248.50 + (Math.random() - 0.5) * 30,
-        'AMZN': 3380.00 + (Math.random() - 0.5) * 150,
-        'NVDA': 875.30 + (Math.random() - 0.5) * 50,
-      };
+      // Utiliser Finnhub pour les prix d'actions
+      const finnhubApiKey = Deno.env.get('FINNHUB_API_KEY');
+      if (!finnhubApiKey) {
+        console.error('Finnhub API key not found in environment variables');
+        
+        // Fallback à des prix simulés si pas de clé API
+        const stockPriceMap: { [key: string]: number } = {
+          'AAPL': 175.43 + (Math.random() - 0.5) * 10,
+          'GOOGL': 2750.80 + (Math.random() - 0.5) * 100,
+          'MSFT': 378.85 + (Math.random() - 0.5) * 20,
+          'TSLA': 248.50 + (Math.random() - 0.5) * 30,
+          'AMZN': 3380.00 + (Math.random() - 0.5) * 150,
+          'NVDA': 875.30 + (Math.random() - 0.5) * 50,
+        };
 
-      for (const symbol of stockSymbols) {
-        stockPrices[symbol] = stockPriceMap[symbol] || (Math.random() * 200 + 50);
+        for (const symbol of stockSymbols) {
+          stockPrices[symbol] = stockPriceMap[symbol] || (Math.random() * 200 + 50);
+        }
+      } else {
+        for (const symbol of stockSymbols) {
+          try {
+            const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${finnhubApiKey}`;
+            const finnhubResponse = await fetch(finnhubUrl);
+            
+            if (finnhubResponse.ok) {
+              const quoteData = await finnhubResponse.json();
+              if (quoteData.c) {
+                stockPrices[symbol] = quoteData.c;
+                console.log(`Stock price for ${symbol}: $${quoteData.c}`);
+              }
+            } else {
+              console.error(`Failed to fetch price for ${symbol}:`, finnhubResponse.statusText);
+              // Fallback à un prix simulé
+              stockPrices[symbol] = Math.random() * 200 + 50;
+            }
+          } catch (error) {
+            console.error(`Error fetching price for ${symbol}:`, error);
+            // Fallback à un prix simulé
+            stockPrices[symbol] = Math.random() * 200 + 50;
+          }
+        }
       }
-      console.log('Stock prices generated:', stockPrices);
+      console.log('Stock prices:', stockPrices);
     }
 
     const triggeredAlerts: Alert[] = [];

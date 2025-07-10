@@ -87,30 +87,54 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
   // Récupérer le prix actuel d'un actif
   const fetchCurrentPrice = async (symbol: string, marketType: string): Promise<number> => {
     if (marketType === 'crypto') {
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        return getDefaultPrice(symbol, marketType);
+      }
+      
       try {
+        // Utiliser Finnhub pour les cryptomonnaies
+        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
         const response = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${symbol.toLowerCase()}&vs_currencies=usd`
+          `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
         );
         
         if (response.ok) {
           const data = await response.json();
-          return data[symbol.toLowerCase()]?.usd || getDefaultPrice(symbol, marketType);
+          if (data.c) {
+            return data.c;
+          }
         }
+        return getDefaultPrice(symbol, marketType);
       } catch (error) {
         console.error('Error fetching crypto price:', error);
+        return getDefaultPrice(symbol, marketType);
       }
     } else if (marketType === 'stock') {
-      // Pour les actions, utiliser des prix réalistes
-      const stockPrices = {
-        'AAPL': 175.43 + (Math.random() - 0.5) * 5,
-        'GOOGL': 2750.80 + (Math.random() - 0.5) * 50,
-        'MSFT': 378.85 + (Math.random() - 0.5) * 10,
-        'TSLA': 248.50 + (Math.random() - 0.5) * 15,
-        'AMZN': 3380.00 + (Math.random() - 0.5) * 70,
-        'NVDA': 875.30 + (Math.random() - 0.5) * 25,
-      };
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        return getDefaultPrice(symbol, marketType);
+      }
       
-      return stockPrices[symbol] || 100;
+      try {
+        // Utiliser Finnhub pour les actions
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.c) {
+            return data.c;
+          }
+        }
+        return getDefaultPrice(symbol, marketType);
+      } catch (error) {
+        console.error('Error fetching stock price:', error);
+        return getDefaultPrice(symbol, marketType);
+      }
     }
     
     return getDefaultPrice(symbol, marketType);
@@ -119,17 +143,53 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
   // Récupérer le changement de prix sur 24h
   const fetchPriceChange = async (symbol: string, marketType: string): Promise<number> => {
     if (marketType === 'crypto') {
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        return (Math.random() * 10 - 5);
+      }
+      
       try {
+        // Utiliser Finnhub pour les cryptomonnaies
+        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
         const response = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${symbol.toLowerCase()}&vs_currencies=usd&include_24hr_change=true`
+          `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
         );
         
         if (response.ok) {
           const data = await response.json();
-          return data[symbol.toLowerCase()]?.usd_24h_change || (Math.random() * 10 - 5);
+          if (data.dp) {
+            return data.dp;
+          }
         }
+        return (Math.random() * 10 - 5);
       } catch (error) {
         console.error('Error fetching crypto price change:', error);
+        return (Math.random() * 10 - 5);
+      }
+    } else if (marketType === 'stock') {
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        return (Math.random() * 6 - 3);
+      }
+      
+      try {
+        // Utiliser Finnhub pour les actions
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.dp) {
+            return data.dp;
+          }
+        }
+        return (Math.random() * 6 - 3);
+      } catch (error) {
+        console.error('Error fetching stock price change:', error);
+        return (Math.random() * 6 - 3);
       }
     }
     

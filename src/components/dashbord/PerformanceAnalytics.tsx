@@ -24,122 +24,160 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
   const fetchRealData = async () => {
     setLoading(true);
     
+    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+    if (!apiKey) {
+      console.error('Finnhub API key not found');
+      setFallbackData();
+      setLoading(false);
+      return;
+    }
+    
     try {
-      // Récupérer des données réelles pour Bitcoin
-      const btcResponse = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${
+      // Récupérer des données réelles pour Bitcoin via Finnhub
+      const days = 
         selectedPeriod === '7d' ? 7 : 
         selectedPeriod === '30d' ? 30 : 
         selectedPeriod === '90d' ? 90 : 365
-      }&x_cg_demo_api_key=CG-Demo`);
+      ;
+      
+      const btcResponse = await fetch(
+        `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:BTCUSDT&resolution=D&count=${days}&token=${apiKey}`
+      );
       
       if (btcResponse.ok) {
-        const btcData = await btcResponse.json();
+        const candleData = await btcResponse.json();
         
-        // Générer des données de performance basées sur les prix réels de Bitcoin
-        const btcPrices = btcData.prices;
-        const formattedData = btcPrices.filter((_, i) => i % 5 === 0).map((price, index) => {
-          const date = new Date(price[0]);
-          return {
-            date: date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }),
-            portfolio: price[1] * 0.5, // Simuler un portfolio avec 0.5 BTC
-            benchmark: price[1] * 0.4, // Benchmark légèrement inférieur
-          };
-        });
-        
-        setPerformanceData(formattedData);
-        
-        // Calculer les métriques
-        const startPrice = btcPrices[0][1];
-        const endPrice = btcPrices[btcPrices.length - 1][1];
-        const totalReturn = ((endPrice - startPrice) / startPrice) * 100;
-        
-        // Calculer le drawdown maximal
-        let maxDrawdown = 0;
-        let peak = btcPrices[0][1];
-        
-        for (const price of btcPrices) {
-          if (price[1] > peak) {
-            peak = price[1];
+        if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
+          // Générer des données de performance basées sur les prix réels de Bitcoin
+          const prices = candleData.c;
+          const timestamps = candleData.t;
+          
+          const formattedData = prices.map((price, index) => {
+            const date = new Date(timestamps[index] * 1000);
+            return {
+              date: date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }),
+              portfolio: price * 0.5, // Simuler un portfolio avec 0.5 BTC
+              benchmark: price * 0.4, // Benchmark légèrement inférieur
+            };
+          });
+          
+          setPerformanceData(formattedData);
+          
+          // Calculer les métriques
+          const startPrice = prices[0];
+          const endPrice = prices[prices.length - 1];
+          const totalReturn = ((endPrice - startPrice) / startPrice) * 100;
+          
+          // Calculer le drawdown maximal
+          let maxDrawdown = 0;
+          let peak = prices[0];
+          
+          for (const price of prices) {
+            if (price > peak) {
+              peak = price;
+            }
+            
+            const drawdown = ((peak - price) / peak) * 100;
+            if (drawdown > maxDrawdown) {
+              maxDrawdown = drawdown;
+            }
           }
           
-          const drawdown = ((peak - price[1]) / peak) * 100;
-          if (drawdown > maxDrawdown) {
-            maxDrawdown = drawdown;
+          // Calculer le ratio Sharpe (simplifié)
+          const returns = [];
+          for (let i = 1; i < prices.length; i++) {
+            const dailyReturn = (prices[i] - prices[i-1]) / prices[i-1];
+            returns.push(dailyReturn);
           }
-        }
-        
-        // Calculer le ratio Sharpe (simplifié)
-        const returns = [];
-        for (let i = 1; i < btcPrices.length; i++) {
-          const dailyReturn = (btcPrices[i][1] - btcPrices[i-1][1]) / btcPrices[i-1][1];
-          returns.push(dailyReturn);
-        }
-        
-        const avgReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-        const stdDev = Math.sqrt(returns.reduce((sum, ret) => sum + Math.pow(ret - avgReturn, 2), 0) / returns.length);
-        const sharpeRatio = (avgReturn * 365) / (stdDev * Math.sqrt(365));
-        
-        setMetrics([
-          {
-            title: 'Rendement Total',
-            value: `+${totalReturn.toFixed(1)}%`,
-            change: `+${(totalReturn / 2).toFixed(1)}%`,
-            icon: TrendingUp,
-            color: 'green'
-          },
-          {
-            title: 'Valeur Portfolio',
-            value: `€${(endPrice * 0.5).toFixed(0)}`,
-            change: `+€${((endPrice - startPrice) * 0.5).toFixed(0)}`,
-            icon: DollarSign,
-            color: 'blue'
-          },
-          {
-            title: 'Ratio Sharpe',
-            value: sharpeRatio.toFixed(2),
-            change: `+${(sharpeRatio * 0.1).toFixed(2)}`,
-            icon: Target,
-            color: 'purple'
-          },
-          {
-            title: 'Max Drawdown',
-            value: `-${maxDrawdown.toFixed(1)}%`,
-            change: `-${(maxDrawdown * 0.2).toFixed(1)}%`,
-            icon: TrendingDown,
-            color: 'red'
-          }
-        ]);
-        
-        // Allocation d'actifs basée sur des données réelles
-        setAllocationData([
-          { name: 'Bitcoin', value: 45, color: '#f97316' },
-          { name: 'Ethereum', value: 30, color: '#2563eb' },
-          { name: 'Solana', value: 15, color: '#16a34a' },
-          { name: 'Stablecoins', value: 10, color: '#6b7280' }
-        ]);
-        
-        // Top performers basés sur des données réelles
-        const ethResponse = await fetch('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=30');
-        const solResponse = await fetch('https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=30');
-        
-        if (ethResponse.ok && solResponse.ok) {
-          const ethData = await ethResponse.json();
-          const solData = await solResponse.json();
           
-          const ethStartPrice = ethData.prices[0][1];
-          const ethEndPrice = ethData.prices[ethData.prices.length - 1][1];
-          const ethReturn = ((ethEndPrice - ethStartPrice) / ethStartPrice) * 100;
+          const avgReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
+          const stdDev = Math.sqrt(returns.reduce((sum, ret) => sum + Math.pow(ret - avgReturn, 2), 0) / returns.length);
+          const sharpeRatio = (avgReturn * 365) / (stdDev * Math.sqrt(365));
           
-          const solStartPrice = solData.prices[0][1];
-          const solEndPrice = solData.prices[solData.prices.length - 1][1];
-          const solReturn = ((solEndPrice - solStartPrice) / solStartPrice) * 100;
-          
-          setTopPerformers([
-            { symbol: 'BTC', name: 'Bitcoin', return: totalReturn, allocation: 45 },
-            { symbol: 'ETH', name: 'Ethereum', return: ethReturn, allocation: 30 },
-            { symbol: 'SOL', name: 'Solana', return: solReturn, allocation: 15 },
-            { symbol: 'USDC', name: 'USD Coin', return: 0.1, allocation: 10 }
+          setMetrics([
+            {
+              title: 'Rendement Total',
+              value: `+${totalReturn.toFixed(1)}%`,
+              change: `+${(totalReturn / 2).toFixed(1)}%`,
+              icon: TrendingUp,
+              color: 'green'
+            },
+            {
+              title: 'Valeur Portfolio',
+              value: `€${(endPrice * 0.5).toFixed(0)}`,
+              change: `+€${((endPrice - startPrice) * 0.5).toFixed(0)}`,
+              icon: DollarSign,
+              color: 'blue'
+            },
+            {
+              title: 'Ratio Sharpe',
+              value: sharpeRatio.toFixed(2),
+              change: `+${(sharpeRatio * 0.1).toFixed(2)}`,
+              icon: Target,
+              color: 'purple'
+            },
+            {
+              title: 'Max Drawdown',
+              value: `-${maxDrawdown.toFixed(1)}%`,
+              change: `-${(maxDrawdown * 0.2).toFixed(1)}%`,
+              icon: TrendingDown,
+              color: 'red'
+            }
           ]);
+          
+          // Allocation d'actifs basée sur des données réelles
+          setAllocationData([
+            { name: 'Bitcoin', value: 45, color: '#f97316' },
+            { name: 'Ethereum', value: 30, color: '#2563eb' },
+            { name: 'Solana', value: 15, color: '#16a34a' },
+            { name: 'Stablecoins', value: 10, color: '#6b7280' }
+          ]);
+          
+          // Top performers basés sur des données réelles
+          try {
+            const ethResponse = await fetch(
+              `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:ETHUSDT&resolution=D&count=30&token=${apiKey}`
+            );
+            
+            const solResponse = await fetch(
+              `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:SOLUSDT&resolution=D&count=30&token=${apiKey}`
+            );
+            
+            if (ethResponse.ok && solResponse.ok) {
+              const ethData = await ethResponse.json();
+              const solData = await solResponse.json();
+              
+              if (ethData.s === 'ok' && solData.s === 'ok') {
+                const ethStartPrice = ethData.c[0];
+                const ethEndPrice = ethData.c[ethData.c.length - 1];
+                const ethReturn = ((ethEndPrice - ethStartPrice) / ethStartPrice) * 100;
+                
+                const solStartPrice = solData.c[0];
+                const solEndPrice = solData.c[solData.c.length - 1];
+                const solReturn = ((solEndPrice - solStartPrice) / solStartPrice) * 100;
+                
+                setTopPerformers([
+                  { symbol: 'BTC', name: 'Bitcoin', return: totalReturn, allocation: 45 },
+                  { symbol: 'ETH', name: 'Ethereum', return: ethReturn, allocation: 30 },
+                  { symbol: 'SOL', name: 'Solana', return: solReturn, allocation: 15 },
+                  { symbol: 'USDC', name: 'USD Coin', return: 0.1, allocation: 10 }
+                ]);
+              } else {
+                throw new Error('Invalid data for ETH or SOL');
+              }
+            } else {
+              throw new Error('Failed to fetch ETH or SOL data');
+            }
+          } catch (error) {
+            console.error('Error fetching additional crypto data:', error);
+            // Fallback pour les top performers
+            setTopPerformers([
+              { symbol: 'BTC', name: 'Bitcoin', return: totalReturn, allocation: 45 },
+              { symbol: 'ETH', name: 'Ethereum', return: 12.3, allocation: 30 },
+              { symbol: 'SOL', name: 'Solana', return: 18.7, allocation: 15 },
+              { symbol: 'USDC', name: 'USD Coin', return: 0.1, allocation: 10 }
+            ]);
+          }
         }
       } else {
         // Fallback en cas d'erreur API

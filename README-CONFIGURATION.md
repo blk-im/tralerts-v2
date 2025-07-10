@@ -46,15 +46,19 @@ Pour que les emails fonctionnent correctement:
 3. Configurez un fournisseur SMTP dans "Authentication" > "Email Settings"
 4. Vous pouvez utiliser Gmail, SendGrid, ou un autre service SMTP
 
-## 4. Configuration de l'API CoinGecko
+## 4. Configuration de l'API Finnhub
 
-Pour éviter les limitations de l'API CoinGecko:
+Pour que les prix des cryptomonnaies, actions et actualités fonctionnent correctement:
 
-1. Créez un compte sur [CoinGecko](https://www.coingecko.com/en/api)
-2. Obtenez une clé API (même la version gratuite est utile)
+1. Créez un compte sur [Finnhub](https://finnhub.io/)
+2. Obtenez une clé API (la version gratuite permet 60 appels par minute)
 3. Ajoutez la clé à votre fichier `.env`:
 ```
-VITE_COINGECKO_API_KEY=votre_cle_coingecko
+VITE_FINNHUB_API_KEY=votre_cle_finnhub
+```
+4. Ajoutez également la clé dans les variables d'environnement de Supabase Edge Functions:
+```
+FINNHUB_API_KEY=votre_cle_finnhub
 ```
 
 ## 5. Déploiement des Edge Functions

@@ -105,21 +105,56 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
   // Fonction pour obtenir un prix actuel (simulé pour la démo)
   const fetchCurrentPrice = async (symbol: string, marketType: string): Promise<number> => {
     if (marketType === 'crypto') {
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        return getDefaultPrice(symbol, marketType);
+      }
+      
       try {
+        // Utiliser Finnhub pour les cryptomonnaies
+        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
         const response = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${symbol.toLowerCase()}&vs_currencies=usd`
+          `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
         );
         
         if (response.ok) {
           const data = await response.json();
-          return data[symbol.toLowerCase()]?.usd || getDefaultPrice(symbol, marketType);
+          if (data.c) {
+            return data.c;
+          }
         }
+        return getDefaultPrice(symbol, marketType);
       } catch (error) {
         console.error('Error fetching crypto price:', error);
+        return getDefaultPrice(symbol, marketType);
+      }
+    } else if (marketType === 'stock') {
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        return getDefaultPrice(symbol, marketType);
+      }
+      
+      try {
+        // Utiliser Finnhub pour les actions
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.c) {
+            return data.c;
+          }
+        }
+        return getDefaultPrice(symbol, marketType);
+      } catch (error) {
+        console.error('Error fetching stock price:', error);
+        return getDefaultPrice(symbol, marketType);
       }
     }
     
-    // Pour les actions ou en cas d'erreur, utiliser des prix par défaut
     return getDefaultPrice(symbol, marketType);
   };
 

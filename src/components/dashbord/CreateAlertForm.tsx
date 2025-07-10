@@ -23,10 +23,10 @@ export interface AlertFormData {
 }
 
 const popularCryptos = [
-  { symbol: 'bitcoin', name: 'Bitcoin', ticker: 'BTC' },
-  { symbol: 'ethereum', name: 'Ethereum', ticker: 'ETH' },
-  { symbol: 'cardano', name: 'Cardano', ticker: 'ADA' },
-  { symbol: 'solana', name: 'Solana', ticker: 'SOL' },
+  { symbol: 'BTC', name: 'Bitcoin', ticker: 'BTC' },
+  { symbol: 'ETH', name: 'Ethereum', ticker: 'ETH' },
+  { symbol: 'ADA', name: 'Cardano', ticker: 'ADA' },
+  { symbol: 'SOL', name: 'Solana', ticker: 'SOL' },
 ];
 
 const popularStocks = [

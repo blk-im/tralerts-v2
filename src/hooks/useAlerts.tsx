@@ -80,6 +80,16 @@ export function useAlerts(userId: string | undefined) {
   const createAlert = async (alert: Omit<InsertAlert, 'user_id'>) => {
     if (!userId) return { error: new Error('User not authenticated') };
 
+    // Vérifier si le symbole est au bon format pour Finnhub
+    let formattedSymbol = alert.symbol;
+    if (alert.market_type === 'crypto') {
+      // Pour Finnhub, les cryptos doivent être en majuscules
+      formattedSymbol = alert.symbol.toUpperCase();
+    } else {
+      // Pour les actions, toujours en majuscules
+      formattedSymbol = alert.symbol.toUpperCase();
+    }
+
     try {
       // Vérifier si la table alerts existe
       const { error: tableCheckError } = await supabase
@@ -94,7 +104,7 @@ export function useAlerts(userId: string | undefined) {
       console.log('Creating alert:', alert);
       const { data, error } = await supabase
         .from('alerts')
-        .insert([{ ...alert, user_id: userId }])
+        .insert([{ ...alert, symbol: formattedSymbol, user_id: userId }])
         .select()
         .single();
 
