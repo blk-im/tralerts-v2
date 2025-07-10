@@ -12,12 +12,11 @@ export function SocialTrading({ onPremiumUpgrade }: SocialTradingProps) {
   const [isFreePlan] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  // Traders réels avec données authentiques et photos
+  // Traders réels avec données authentiques
   const [topTraders, setTopTraders] = useState([
     {
       id: 1,
       name: 'Michael Saylor',
-      avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150',
       followers: 2800000,
       winRate: 78,
       totalReturn: 245,
@@ -32,7 +31,6 @@ export function SocialTrading({ onPremiumUpgrade }: SocialTradingProps) {
     {
       id: 2,
       name: 'Cathie Wood',
-      avatar: 'https://images.pexels.com/photos/1587009/pexels-photo-1587009.jpeg?auto=compress&cs=tinysrgb&w=150',
       followers: 1200000,
       winRate: 82,
       totalReturn: 156,
@@ -47,7 +45,6 @@ export function SocialTrading({ onPremiumUpgrade }: SocialTradingProps) {
     {
       id: 3,
       name: 'Raoul Pal',
-      avatar: 'https://images.pexels.com/photos/2182970/pexels-photo-2182970.jpeg?auto=compress&cs=tinysrgb&w=300',
       followers: 950000,
       winRate: 85,
       totalReturn: 389,
@@ -62,7 +59,6 @@ export function SocialTrading({ onPremiumUpgrade }: SocialTradingProps) {
     {
       id: 4,
       name: 'Warren Buffett',
-      avatar: 'https://images.pexels.com/photos/5792641/pexels-photo-5792641.jpeg?auto=compress&cs=tinysrgb&w=300',
       followers: 5670000,
       winRate: 71,
       totalReturn: 89,
@@ -133,27 +129,45 @@ export function SocialTrading({ onPremiumUpgrade }: SocialTradingProps) {
   const fetchRealData = async () => {
     setLoading(true);
     
+    // Utiliser Finnhub pour les données réelles
     try {
-      // Récupérer les prix actuels pour mettre à jour les trades
-      const btcResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-      const ethResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
+        setTimeout(() => setLoading(false), 800);
+        return;
+      }
       
-      if (btcResponse.ok && ethResponse.ok) {
+      // Récupérer les prix actuels via Finnhub
+      const btcResponse = await fetch(`https://finnhub.io/api/v1/quote?symbol=BINANCE:BTCUSDT&token=${apiKey}`);
+      const ethResponse = await fetch(`https://finnhub.io/api/v1/quote?symbol=BINANCE:ETHUSDT&token=${apiKey}`);
+      const tslaResponse = await fetch(`https://finnhub.io/api/v1/quote?symbol=TSLA&token=${apiKey}`);
+      const aaplResponse = await fetch(`https://finnhub.io/api/v1/quote?symbol=AAPL&token=${apiKey}`);
+      
+      if (btcResponse.ok && ethResponse.ok && tslaResponse.ok && aaplResponse.ok) {
         const btcData = await btcResponse.json();
         const ethData = await ethResponse.json();
+        const tslaData = await tslaResponse.json();
+        const aaplData = await aaplResponse.json();
         
-        const btcPrice = btcData.bitcoin?.usd || 60500;
-        const ethPrice = ethData.ethereum?.usd || 3280;
+        const btcPrice = btcData.c || 60500;
+        const ethPrice = ethData.c || 3280;
+        const tslaPrice = tslaData.c || 248;
+        const aaplPrice = aaplData.c || 192;
         
         // Mettre à jour les trades avec les prix réels
         const updatedTrades = [...recentTrades];
         updatedTrades[0].price = btcPrice;
+        updatedTrades[1].price = tslaPrice;
         updatedTrades[2].price = ethPrice;
+        updatedTrades[3].price = aaplPrice;
         
         // Mettre à jour les derniers trades des traders
         const updatedTraders = [...topTraders];
         updatedTraders[0].lastTrade = `Achat BTC à $${btcPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+        updatedTraders[1].lastTrade = `Achat TSLA à $${tslaPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
         updatedTraders[2].lastTrade = `Achat ETH à $${ethPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+        updatedTraders[3].lastTrade = `Achat AAPL à $${aaplPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
         
         setRecentTrades(updatedTrades);
         setTopTraders(updatedTraders);
@@ -316,11 +330,9 @@ export function SocialTrading({ onPremiumUpgrade }: SocialTradingProps) {
                 <div key={trader.id} className="p-4 sm:p-6 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <img 
-                        src={trader.avatar} 
-                        alt={trader.name} 
-                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover"
-                      />
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                        {trader.name.charAt(0)}
+                      </div>
                       <div>
                         <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base">
                           {trader.name}

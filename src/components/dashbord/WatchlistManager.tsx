@@ -236,6 +236,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
   const addToWatchlist = async () => {
     if (!newSymbol.trim()) return;
 
+    // Vérifier la limite du plan gratuit
     if (isFreePlan && watchlist.length >= 10) {
       alert('Limite gratuite atteinte ! Vous pouvez surveiller maximum 10 actifs avec le plan gratuit. Passez au Premium pour une watchlist illimitée.');
       return;
@@ -243,6 +244,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
 
     try {
       setLoading(true);
+      
       // Déterminer le type de marché
       const isCrypto = !newSymbol.match(/^[A-Z]{1,5}$/);
       const marketType = isCrypto ? 'crypto' : 'stock';
@@ -259,18 +261,55 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
         return;
       }
       
+      // Vérifier si la table watchlist existe
+      const { error: tableCheckError } = await supabase
+        .from('watchlist')
+        .select('count(*)', { count: 'exact', head: true })
+        .limit(1);
+      
+      if (tableCheckError) {
+        console.error('Error checking watchlist table:', tableCheckError);
+        toast.error('Erreur de base de données. Veuillez configurer Supabase correctement.');
+        setLoading(false);
+        return;
+      }
+      
       // Récupérer le prix actuel
       let currentPrice = 0;
       let change24h = 0;
       
-      try {
-        currentPrice = await fetchCurrentPrice(formattedSymbol, marketType);
-        change24h = await fetchPriceChange(formattedSymbol, marketType);
-      } catch (priceError) {
-        console.error('Error fetching price:', priceError);
-        // Utiliser des valeurs par défaut en cas d'erreur
+      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+      if (!apiKey) {
+        console.error('Finnhub API key not found');
         currentPrice = getDefaultPrice(formattedSymbol, marketType);
         change24h = (Math.random() * 6) - 3;
+      } else {
+        try {
+          // Utiliser Finnhub pour récupérer les prix
+          const finnhubSymbol = marketType === 'crypto' 
+            ? `BINANCE:${formattedSymbol.toUpperCase()}USDT` 
+            : formattedSymbol.toUpperCase();
+          
+          const response = await fetch(
+            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${apiKey}`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.c) {
+              currentPrice = data.c;
+              change24h = data.dp || ((Math.random() * 6) - 3);
+            } else {
+              throw new Error(`No price data for ${finnhubSymbol}`);
+            }
+          } else {
+            throw new Error(`Failed to fetch price for ${finnhubSymbol}`);
+          }
+        } catch (priceError) {
+          console.error('Error fetching price:', priceError);
+          currentPrice = getDefaultPrice(formattedSymbol, marketType);
+          change24h = (Math.random() * 6) - 3;
+        }
       }
       
       // Ajouter à la base de données
@@ -287,7 +326,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       
       if (error) {
         console.error('Error adding to watchlist:', error);
-        alert('Erreur lors de l\'ajout à la watchlist');
+        toast.error('Erreur lors de l\'ajout à la watchlist');
         return;
       }
       
@@ -306,7 +345,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       setNewSymbol('');
     } catch (error) {
       console.error('Error adding to watchlist:', error);
-      alert('Erreur lors de l\'ajout à la watchlist');
+      toast.error('Erreur lors de l\'ajout à la watchlist');
     } finally {
       setLoading(false);
     }
@@ -322,7 +361,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       
       if (error) {
         console.error('Error removing from watchlist:', error);
-        alert('Erreur lors de la suppression');
+        toast.error('Erreur lors de la suppression');
         return;
       }
       
@@ -330,7 +369,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       setWatchlist(prev => prev.filter(item => item.id !== id));
     } catch (error) {
       console.error('Error removing from watchlist:', error);
-      alert('Erreur lors de la suppression');
+      toast.error('Erreur lors de la suppression');
     }
   };
 
@@ -348,7 +387,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       
       if (error) {
         console.error('Error toggling favorite:', error);
-        alert('Erreur lors de la mise à jour');
+        toast.error('Erreur lors de la mise à jour');
         return;
       }
       
@@ -358,7 +397,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       ));
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      alert('Erreur lors de la mise à jour');
+      toast.error('Erreur lors de la mise à jour');
     }
   };
 

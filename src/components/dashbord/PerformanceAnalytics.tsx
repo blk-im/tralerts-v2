@@ -24,6 +24,7 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
   const fetchRealData = async () => {
     setLoading(true);
     
+    // Utiliser Finnhub pour les données de performance
     const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
     if (!apiKey) {
       console.error('Finnhub API key not found');
@@ -37,12 +38,13 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
       const days = 
         selectedPeriod === '7d' ? 7 : 
         selectedPeriod === '30d' ? 30 : 
-        selectedPeriod === '90d' ? 90 : 365
-      ;
+        selectedPeriod === '90d' ? 90 : 365;
       
-      const btcResponse = await fetch(
-        `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:BTCUSDT&resolution=D&count=${days}&token=${apiKey}`
-      );
+      // Récupérer les données BTC via Finnhub
+      const btcSymbol = 'BINANCE:BTCUSDT';
+      console.log(`Fetching BTC data for ${days} days from Finnhub`);
+      
+      const btcResponse = await fetch(`https://finnhub.io/api/v1/crypto/candle?symbol=${btcSymbol}&resolution=D&count=${days}&token=${apiKey}`);
       
       if (btcResponse.ok) {
         const candleData = await btcResponse.json();
@@ -136,11 +138,11 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
           // Top performers basés sur des données réelles
           try {
             const ethResponse = await fetch(
-              `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:ETHUSDT&resolution=D&count=30&token=${apiKey}`
+              `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:ETHUSDT&resolution=D&count=${Math.min(days, 30)}&token=${apiKey}`
             );
             
             const solResponse = await fetch(
-              `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:SOLUSDT&resolution=D&count=30&token=${apiKey}`
+              `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:SOLUSDT&resolution=D&count=${Math.min(days, 30)}&token=${apiKey}`
             );
             
             if (ethResponse.ok && solResponse.ok) {
@@ -164,9 +166,11 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
                 ]);
               } else {
                 throw new Error('Invalid data for ETH or SOL');
+                console.error('Invalid data format from Finnhub');
               }
             } else {
               throw new Error('Failed to fetch ETH or SOL data');
+              console.error('Failed to fetch data from Finnhub');
             }
           } catch (error) {
             console.error('Error fetching additional crypto data:', error);
@@ -178,9 +182,12 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
               { symbol: 'USDC', name: 'USD Coin', return: 0.1, allocation: 10 }
             ]);
           }
+        } else {
+          console.error('Invalid BTC data format from Finnhub:', candleData);
+          setFallbackData();
         }
       } else {
-        // Fallback en cas d'erreur API
+        console.error('Failed to fetch BTC data from Finnhub:', await btcResponse.text());
         setFallbackData();
       }
     } catch (error) {
@@ -194,14 +201,15 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
   // Utiliser des données de secours en cas d'erreur API
   const setFallbackData = () => {
     // Données de performance
+    console.log('Using fallback performance data');
     setPerformanceData([
-      { date: '01/01', portfolio: 10000, benchmark: 10000 },
-      { date: '05/01', portfolio: 10250, benchmark: 10100 },
-      { date: '10/01', portfolio: 10800, benchmark: 10300 },
-      { date: '15/01', portfolio: 10600, benchmark: 10250 },
-      { date: '20/01', portfolio: 11200, benchmark: 10400 },
-      { date: '25/01', portfolio: 11800, benchmark: 10600 },
-      { date: '30/01', portfolio: 12150, benchmark: 10750 }
+      { date: '01/05', portfolio: 10000, benchmark: 10000 },
+      { date: '05/05', portfolio: 10250, benchmark: 10100 },
+      { date: '10/05', portfolio: 10800, benchmark: 10300 },
+      { date: '15/05', portfolio: 10600, benchmark: 10250 },
+      { date: '20/05', portfolio: 11200, benchmark: 10400 },
+      { date: '25/05', portfolio: 11800, benchmark: 10600 },
+      { date: '30/05', portfolio: 12150, benchmark: 10750 }
     ]);
     
     // Allocation d'actifs
@@ -214,10 +222,10 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
     
     // Top performers
     setTopPerformers([
-      { symbol: 'BTC', name: 'Bitcoin', return: 15.2, allocation: 25 },
-      { symbol: 'AAPL', name: 'Apple', return: 8.7, allocation: 20 },
-      { symbol: 'ETH', name: 'Ethereum', return: 12.3, allocation: 15 },
-      { symbol: 'GOOGL', name: 'Alphabet', return: 6.1, allocation: 10 }
+      { symbol: 'BTC', name: 'Bitcoin', return: 25.2, allocation: 25 },
+      { symbol: 'AAPL', name: 'Apple', return: 18.7, allocation: 20 },
+      { symbol: 'ETH', name: 'Ethereum', return: 22.3, allocation: 15 },
+      { symbol: 'GOOGL', name: 'Alphabet', return: 16.1, allocation: 10 }
     ]);
     
     // Métriques
@@ -225,7 +233,7 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
       {
         title: 'Rendement Total',
         value: '+21.5%',
-        change: '+2.3%',
+        change: '+5.3%',
         icon: TrendingUp,
         color: 'green'
       },
@@ -239,14 +247,14 @@ export function PerformanceAnalytics({ onPremiumUpgrade }: PerformanceAnalyticsP
       {
         title: 'Ratio Sharpe',
         value: '1.42',
-        change: '+0.15',
+        change: '+0.25',
         icon: Target,
         color: 'purple'
       },
       {
         title: 'Max Drawdown',
         value: '-5.2%',
-        change: '-1.1%',
+        change: '-0.8%',
         icon: TrendingDown,
         color: 'red'
       }

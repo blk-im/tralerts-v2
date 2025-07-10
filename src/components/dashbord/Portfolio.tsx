@@ -35,6 +35,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
   const fetchPortfolio = async () => {
     try {
       setLoading(true);
+      console.log('Fetching portfolio data');
       
       // Vérifier si la table portfolio existe
       const { error: tableCheckError } = await supabase
@@ -43,6 +44,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
       
       if (tableCheckError) {
         console.error('Error checking portfolio table:', tableCheckError);
+        console.log('Using demo portfolio data');
         setDemoPortfolio();
         return;
       }
@@ -55,7 +57,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
       
       if (error) {
         console.error('Error fetching portfolio:', error);
-        // Utiliser des données de démonstration en cas d'erreur
+        console.log('Using demo portfolio data due to error');
         setDemoPortfolio();
         return;
       }
@@ -64,7 +66,13 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
         // Convertir les données de la base en PortfolioItem
         const items: PortfolioItem[] = await Promise.all(portfolioData.map(async (item) => {
           // Récupérer le prix actuel (pour une démo, on utilise des prix simulés)
-          const currentPrice = await fetchCurrentPrice(item.symbol, item.market_type);
+          let currentPrice;
+          try {
+            currentPrice = await fetchCurrentPrice(item.symbol, item.market_type);
+          } catch (error) {
+            console.error(`Error fetching price for ${item.symbol}:`, error);
+            currentPrice = getDefaultPrice(item.symbol, item.market_type);
+          }
           
           return {
             symbol: item.symbol,
@@ -96,6 +104,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
       }
     } catch (error) {
       console.error('Error in portfolio fetch:', error);
+      console.log('Using demo portfolio data due to error');
       setDemoPortfolio();
     } finally {
       setLoading(false);
@@ -105,6 +114,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
   // Fonction pour obtenir un prix actuel (simulé pour la démo)
   const fetchCurrentPrice = async (symbol: string, marketType: string): Promise<number> => {
     if (marketType === 'crypto') {
+      // Utiliser Finnhub pour les cryptomonnaies
       const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
       if (!apiKey) {
         console.error('Finnhub API key not found');
@@ -112,8 +122,9 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
       }
       
       try {
-        // Utiliser Finnhub pour les cryptomonnaies
         const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
+        console.log(`Fetching crypto price for ${cryptoSymbol}`);
+        
         const response = await fetch(
           `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
         );
@@ -121,15 +132,20 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
         if (response.ok) {
           const data = await response.json();
           if (data.c) {
+            console.log(`Got price for ${symbol}: $${data.c}`);
             return data.c;
           }
+          console.error('No price data in response:', data);
+          return getDefaultPrice(symbol, marketType);
         }
+        console.error('Error response from Finnhub:', await response.text());
         return getDefaultPrice(symbol, marketType);
       } catch (error) {
         console.error('Error fetching crypto price:', error);
         return getDefaultPrice(symbol, marketType);
       }
     } else if (marketType === 'stock') {
+      // Utiliser Finnhub pour les actions
       const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
       if (!apiKey) {
         console.error('Finnhub API key not found');
@@ -137,7 +153,9 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
       }
       
       try {
-        // Utiliser Finnhub pour les actions
+        const stockSymbol = symbol.toUpperCase();
+        console.log(`Fetching stock price for ${stockSymbol}`);
+        
         const response = await fetch(
           `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
         );
@@ -145,9 +163,13 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
         if (response.ok) {
           const data = await response.json();
           if (data.c) {
+            console.log(`Got price for ${symbol}: $${data.c}`);
             return data.c;
           }
+          console.error('No price data in response:', data);
+          return getDefaultPrice(symbol, marketType);
         }
+        console.error('Error response from Finnhub:', await response.text());
         return getDefaultPrice(symbol, marketType);
       } catch (error) {
         console.error('Error fetching stock price:', error);
@@ -161,16 +183,16 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
   // Prix par défaut pour la démo
   const getDefaultPrice = (symbol: string, marketType: string): number => {
     const prices: {[key: string]: number} = {
-      'bitcoin': 45000,
-      'ethereum': 3200,
-      'cardano': 0.45,
-      'solana': 98,
-      'AAPL': 175,
-      'GOOGL': 2750,
-      'MSFT': 378,
-      'TSLA': 250,
-      'AMZN': 3380,
-      'NVDA': 875
+      'bitcoin': 85000,
+      'ethereum': 5200,
+      'cardano': 1.45,
+      'solana': 198,
+      'AAPL': 275,
+      'GOOGL': 3750,
+      'MSFT': 478,
+      'TSLA': 350,
+      'AMZN': 4380,
+      'NVDA': 1275
     };
     
     return prices[symbol.toLowerCase()] || (marketType === 'crypto' ? 100 : 200);

@@ -27,6 +27,7 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
   const fetchRealIndicators = async (symbol) => {
     setLoading(true);
     
+    // Utiliser Finnhub pour les indicateurs techniques
     const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
     if (!apiKey) {
       console.error('Finnhub API key not found');
@@ -37,12 +38,14 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
     
     try {
       // Déterminer si c'est une crypto ou une action
-      const isCrypto = ['BTC', 'ETH', 'ADA', 'SOL'].includes(symbol);
+      const isCrypto = ['BTC', 'ETH', 'ADA', 'SOL'].includes(symbol.toUpperCase());
       
       // Construire le symbole pour Finnhub
       const finnhubSymbol = isCrypto 
-        ? `BINANCE:${symbol}USDT` 
-        : symbol;
+        ? `BINANCE:${symbol.toUpperCase()}USDT` 
+        : symbol.toUpperCase();
+      
+      console.log(`Fetching technical data for ${finnhubSymbol}`);
       
       // Récupérer les données de chandeliers
       const candleResponse = await fetch(
@@ -55,6 +58,7 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
         if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
           // Extraire les prix de clôture
           const prices = candleData.c;
+          const volumes = candleData.v || [];
           
           // Calculer RSI (Relative Strength Index)
           const rsi = calculateRSI(prices);
@@ -75,6 +79,7 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
             const quoteData = await quoteResponse.json();
             if (quoteData.c) {
               currentPrice = quoteData.c;
+              console.log(`Current price for ${symbol}: $${currentPrice}`);
             }
           }
           
@@ -117,9 +122,9 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
             },
             { 
               name: 'Volume', 
-              value: calculateVolumeChange(data.total_volumes), 
-              signal: calculateVolumeChange(data.total_volumes) > 20 ? 'Fort' : 'Faible',
-              color: calculateVolumeChange(data.total_volumes) > 20 ? 'green' : 'blue',
+              value: calculateVolumeChange(volumes), 
+              signal: calculateVolumeChange(volumes) > 20 ? 'Fort' : 'Faible',
+              color: calculateVolumeChange(volumes) > 20 ? 'green' : 'blue',
               description: 'Volume change (%)'
             }
           ]);
@@ -152,9 +157,13 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
             }
           ]);
         } else {
+          console.error(`Invalid candle data for ${symbol}:`, candleData);
+          throw new Error(`Invalid candle data for ${symbol}`);
+        } else {
           throw new Error(`Invalid candle data for ${symbol}`);
         }
       } else {
+        console.error(`Failed to fetch candle data for ${symbol}:`, await candleResponse.text());
         throw new Error(`Failed to fetch candle data for ${symbol}`);
         }
     } catch (error) {
@@ -167,7 +176,7 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
 
   // Fonctions de calcul d'indicateurs techniques
   const calculateRSI = (prices, periods = 14) => {
-    if (prices.length < periods + 1) return 50;
+    if (!prices || prices.length < periods + 1) return 50;
     
     let gains = 0;
     let losses = 0;
@@ -255,10 +264,10 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
   };
   
   const calculateVolumeChange = (volumes, period = 7) => {
-    if (volumes.length < period * 2) return 0;
+    if (!volumes || volumes.length < period * 2) return 0;
     
-    const recentVolume = volumes.slice(-period).map(v => v[1]).reduce((sum, vol) => sum + vol, 0);
-    const previousVolume = volumes.slice(-period*2, -period).map(v => v[1]).reduce((sum, vol) => sum + vol, 0);
+    const recentVolume = volumes.slice(-period).reduce((sum, vol) => sum + vol, 0);
+    const previousVolume = volumes.slice(-period*2, -period).reduce((sum, vol) => sum + vol, 0);
     
     return Math.round(((recentVolume - previousVolume) / previousVolume) * 100);
   };
