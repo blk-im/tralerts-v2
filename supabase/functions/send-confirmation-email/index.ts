@@ -1,7 +1,6 @@
 /*
   Supabase Edge Function for sending styled confirmation emails
   This function sends a professional confirmation email with user's phone number
-  Fixed to work properly without localhost issues
 */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -35,14 +34,14 @@ Deno.serve(async (req: Request) => {
 
     // Initialize Supabase client with service role key
     const supabase = createClient(
-      Deno.env.get('https://iqtjyzsbxhvneuwfcjjx.supabase.co') ?? '',
-      Deno.env.get('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxdGp5enNieGh2bmV1d2Zjamp4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDIwMjExNSwiZXhwIjoyMDY1Nzc4MTE1fQ.GTXFZ4X5TrqgvZU9szbSWQ4SGJDySo78G8n0YKcWoes') ?? ''
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     // Generate a proper confirmation URL (not localhost)
     const baseUrl = Deno.env.get('PUBLIC_SITE_URL') || req.headers.get('origin') || 'https://tradingalerts.com';
     const token = Math.random().toString(36).substring(2, 15);
-    const finalConfirmationUrl = confirmationUrl || `${baseUrl}/confirm-email?token=${token}`;
+    const finalConfirmationUrl = confirmationUrl || `${baseUrl}/auth/confirm?token=${token}`;
 
     const emailHtml = generateConfirmationEmailHTML(email, phoneNumber, finalConfirmationUrl);
     
@@ -448,7 +447,7 @@ function generateConfirmationEmailHTML(email: string, phoneNumber?: string, conf
           </div>
           
           <p style="margin: 20px 0 0 0; font-size: 12px; color: #6b7280;">
-            © 2024 TradingAlerts. Tous droits réservés.<br>
+            © 2025 TradingAlerts. Tous droits réservés.<br>
             Vous recevez cet email car vous vous êtes inscrit sur TradingAlerts.
           </p>
         </div>

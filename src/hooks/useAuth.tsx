@@ -77,7 +77,8 @@ export function useAuth() {
           const { error: emailError } = await supabase.functions.invoke('send-confirmation-email', {
             body: { 
               email: email.trim(),
-              phoneNumber: formattedPhone
+              phoneNumber: formattedPhone,
+              confirmationUrl: `${window.location.origin}/auth/confirm`
             }
           });
           if (emailError) {

@@ -1,7 +1,7 @@
 /*
   Enhanced Supabase Edge Function for crypto and stock price monitoring
   Runs every 5 seconds to check active alerts and send multi-channel notifications
-  Includes SMS support via Twilio and enhanced email templates
+  Uses Finnhub API for price data
 */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -22,16 +22,6 @@ interface Alert {
   notification_methods: string[];
   phone_number?: string;
   created_at: string;
-}
-
-interface CryptoPrice {
-  [key: string]: {
-    usd: number;
-  };
-}
-
-interface StockPrice {
-  [key: string]: number;
 }
 
 Deno.serve(async (req: Request) => {
@@ -87,131 +77,90 @@ Deno.serve(async (req: Request) => {
     const cryptoAlerts = alerts.filter(alert => alert.market_type === 'crypto');
     const stockAlerts = alerts.filter(alert => alert.market_type === 'stock');
 
-    let cryptoPrices: CryptoPrice = {};
-    let stockPrices: StockPrice = {};
-
-    // Fetch crypto prices
-    if (cryptoAlerts.length > 0) {
-      const cryptoSymbols = [...new Set(cryptoAlerts.map(alert => alert.symbol.toLowerCase()))];
-      console.log('Checking crypto symbols:', cryptoSymbols);
-
-      // Utiliser Finnhub pour les prix de crypto
-      const finnhubApiKey = Deno.env.get('FINNHUB_API_KEY');
-      if (!finnhubApiKey) {
-        console.error('Finnhub API key not found in environment variables');
-      } else {
-        for (const symbol of cryptoSymbols) {
-          try {
-            const finnhubSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
-            const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${finnhubApiKey}`;
-            const finnhubResponse = await fetch(finnhubUrl);
-            
-            if (finnhubResponse.ok) {
-              const quoteData = await finnhubResponse.json();
-              if (quoteData.c) {
-                // Stocker le prix dans le même format que précédemment pour compatibilité
-                cryptoPrices[symbol] = { usd: quoteData.c };
-                console.log(`Crypto price for ${symbol}: $${quoteData.c}`);
-              }
-            } else {
-              console.error(`Failed to fetch price for ${symbol}:`, finnhubResponse.statusText);
-            }
-          } catch (error) {
-            console.error(`Error fetching price for ${symbol}:`, error);
-          }
-        }
-      }
-    }
-
-    // Fetch stock prices (using Alpha Vantage or similar service)
-    if (stockAlerts.length > 0) {
-      const stockSymbols = [...new Set(stockAlerts.map(alert => alert.symbol.toUpperCase()))];
-      console.log('Checking stock symbols:', stockSymbols);
-
-      // Utiliser Finnhub pour les prix d'actions
-      const finnhubApiKey = Deno.env.get('FINNHUB_API_KEY');
-      if (!finnhubApiKey) {
-        console.error('Finnhub API key not found in environment variables');
-        
-        // Fallback à des prix simulés si pas de clé API
-        const stockPriceMap: { [key: string]: number } = {
-          'AAPL': 175.43 + (Math.random() - 0.5) * 10,
-          'GOOGL': 2750.80 + (Math.random() - 0.5) * 100,
-          'MSFT': 378.85 + (Math.random() - 0.5) * 20,
-          'TSLA': 248.50 + (Math.random() - 0.5) * 30,
-          'AMZN': 3380.00 + (Math.random() - 0.5) * 150,
-          'NVDA': 875.30 + (Math.random() - 0.5) * 50,
-        };
-
-        for (const symbol of stockSymbols) {
-          stockPrices[symbol] = stockPriceMap[symbol] || (Math.random() * 200 + 50);
-        }
-      } else {
-        for (const symbol of stockSymbols) {
-          try {
-            const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${finnhubApiKey}`;
-            const finnhubResponse = await fetch(finnhubUrl);
-            
-            if (finnhubResponse.ok) {
-              const quoteData = await finnhubResponse.json();
-              if (quoteData.c) {
-                stockPrices[symbol] = quoteData.c;
-                console.log(`Stock price for ${symbol}: $${quoteData.c}`);
-              }
-            } else {
-              console.error(`Failed to fetch price for ${symbol}:`, finnhubResponse.statusText);
-              // Fallback à un prix simulé
-              stockPrices[symbol] = Math.random() * 200 + 50;
-            }
-          } catch (error) {
-            console.error(`Error fetching price for ${symbol}:`, error);
-            // Fallback à un prix simulé
-            stockPrices[symbol] = Math.random() * 200 + 50;
-          }
-        }
-      }
-      console.log('Stock prices:', stockPrices);
+    // Get Finnhub API key
+    const finnhubApiKey = Deno.env.get('FINNHUB_API_KEY');
+    if (!finnhubApiKey) {
+      console.error('Finnhub API key not found in environment variables');
+      throw new Error('Finnhub API key not configured');
     }
 
     const triggeredAlerts: Alert[] = [];
 
     // Check crypto alerts
     for (const alert of cryptoAlerts) {
-      const symbolLower = alert.symbol.toLowerCase();
-      const currentPrice = cryptoPrices[symbolLower]?.usd;
-
-      if (!currentPrice) {
-        console.warn(`Crypto price not found for symbol: ${alert.symbol}`);
-        continue;
-      }
-
-      const shouldTrigger = 
-        (alert.condition === 'above' && currentPrice >= alert.target_price) ||
-        (alert.condition === 'below' && currentPrice <= alert.target_price);
-
-      if (shouldTrigger) {
-        console.log(`Crypto alert triggered for ${alert.symbol}: ${currentPrice} ${alert.condition} ${alert.target_price}`);
-        triggeredAlerts.push(alert);
+      try {
+        // Format symbol for Finnhub
+        const finnhubSymbol = `BINANCE:${alert.symbol.toUpperCase()}USDT`;
+        console.log(`Checking crypto price for ${finnhubSymbol}`);
+        
+        // Get current price from Finnhub
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${finnhubApiKey}`
+        );
+        
+        if (!response.ok) {
+          console.error(`Failed to fetch price for ${finnhubSymbol}:`, await response.text());
+          continue;
+        }
+        
+        const data = await response.json();
+        if (!data.c) {
+          console.error(`No price data for ${finnhubSymbol}:`, data);
+          continue;
+        }
+        
+        const currentPrice = data.c;
+        console.log(`Current price for ${alert.symbol}: $${currentPrice}`);
+        
+        const shouldTrigger = 
+          (alert.condition === 'above' && currentPrice >= alert.target_price) ||
+          (alert.condition === 'below' && currentPrice <= alert.target_price);
+        
+        if (shouldTrigger) {
+          console.log(`Crypto alert triggered for ${alert.symbol}: ${currentPrice} ${alert.condition} ${alert.target_price}`);
+          triggeredAlerts.push({...alert, symbol: alert.symbol.toUpperCase()});
+        }
+      } catch (error) {
+        console.error(`Error checking crypto alert for ${alert.symbol}:`, error);
       }
     }
 
     // Check stock alerts
     for (const alert of stockAlerts) {
-      const symbolUpper = alert.symbol.toUpperCase();
-      const currentPrice = stockPrices[symbolUpper];
-
-      if (!currentPrice) {
-        console.warn(`Stock price not found for symbol: ${alert.symbol}`);
-        continue;
-      }
-
-      const shouldTrigger = 
-        (alert.condition === 'above' && currentPrice >= alert.target_price) ||
-        (alert.condition === 'below' && currentPrice <= alert.target_price);
-
-      if (shouldTrigger) {
-        console.log(`Stock alert triggered for ${alert.symbol}: ${currentPrice} ${alert.condition} ${alert.target_price}`);
-        triggeredAlerts.push(alert);
+      try {
+        // Format symbol for Finnhub
+        const finnhubSymbol = alert.symbol.toUpperCase();
+        console.log(`Checking stock price for ${finnhubSymbol}`);
+        
+        // Get current price from Finnhub
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${finnhubApiKey}`
+        );
+        
+        if (!response.ok) {
+          console.error(`Failed to fetch price for ${finnhubSymbol}:`, await response.text());
+          continue;
+        }
+        
+        const data = await response.json();
+        if (!data.c) {
+          console.error(`No price data for ${finnhubSymbol}:`, data);
+          continue;
+        }
+        
+        const currentPrice = data.c;
+        console.log(`Current price for ${alert.symbol}: $${currentPrice}`);
+        
+        const shouldTrigger = 
+          (alert.condition === 'above' && currentPrice >= alert.target_price) ||
+          (alert.condition === 'below' && currentPrice <= alert.target_price);
+        
+        if (shouldTrigger) {
+          console.log(`Stock alert triggered for ${alert.symbol}: ${currentPrice} ${alert.condition} ${alert.target_price}`);
+          triggeredAlerts.push(alert);
+        }
+      } catch (error) {
+        console.error(`Error checking stock alert for ${alert.symbol}:`, error);
       }
     }
 
@@ -229,9 +178,27 @@ Deno.serve(async (req: Request) => {
         }
 
         const userEmail = user.user.email;
-        const currentPrice = alert.market_type === 'crypto' 
-          ? cryptoPrices[alert.symbol.toLowerCase()]?.usd
-          : stockPrices[alert.symbol.toUpperCase()];
+        
+        // Get current price again for notification
+        let currentPrice;
+        try {
+          const finnhubSymbol = alert.market_type === 'crypto' 
+            ? `BINANCE:${alert.symbol.toUpperCase()}USDT` 
+            : alert.symbol.toUpperCase();
+          
+          const response = await fetch(
+            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${finnhubApiKey}`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            currentPrice = data.c;
+          }
+        } catch (error) {
+          console.error(`Error getting current price for notification:`, error);
+          // Use a fallback price if needed
+          currentPrice = alert.target_price * 1.01;
+        }
 
         // Send notifications based on user preferences
         for (const method of alert.notification_methods) {

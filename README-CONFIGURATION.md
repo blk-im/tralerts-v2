@@ -15,6 +15,7 @@ Ce guide vous explique comment configurer correctement votre application Trading
 ```
 VITE_SUPABASE_URL=https://votre-projet.supabase.co
 VITE_SUPABASE_ANON_KEY=votre-cle-anon
+VITE_FINNHUB_API_KEY=votre-cle-finnhub
 ```
 
 ### Étape 3: Exécuter les migrations
@@ -22,7 +23,22 @@ VITE_SUPABASE_ANON_KEY=votre-cle-anon
 2. Exécutez les scripts SQL qui se trouvent dans le dossier `supabase/migrations`
 3. Exécutez-les dans l'ordre (les plus anciens d'abord)
 
-## 2. Configuration des SMS (Twilio)
+## 2. Configuration de Finnhub API (OBLIGATOIRE)
+
+Pour que les prix des cryptomonnaies, actions et actualités fonctionnent correctement:
+
+1. Créez un compte sur [Finnhub](https://finnhub.io/)
+2. Obtenez une clé API (la version gratuite permet 60 appels par minute)
+3. Ajoutez la clé à votre fichier `.env`:
+```
+VITE_FINNHUB_API_KEY=votre_cle_finnhub
+```
+4. Ajoutez également la clé dans les variables d'environnement de Supabase Edge Functions:
+```
+FINNHUB_API_KEY=votre_cle_finnhub
+```
+
+## 3. Configuration des SMS (Twilio)
 
 Pour que les SMS fonctionnent, vous devez configurer Twilio:
 
@@ -37,7 +53,7 @@ TWILIO_AUTH_TOKEN=votre_auth_token
 TWILIO_PHONE_NUMBER=votre_numero_twilio
 ```
 
-## 3. Configuration des Emails
+## 4. Configuration des Emails
 
 Pour que les emails fonctionnent correctement:
 
@@ -45,21 +61,6 @@ Pour que les emails fonctionnent correctement:
 2. Personnalisez les modèles d'email
 3. Configurez un fournisseur SMTP dans "Authentication" > "Email Settings"
 4. Vous pouvez utiliser Gmail, SendGrid, ou un autre service SMTP
-
-## 4. Configuration de l'API Finnhub
-
-Pour que les prix des cryptomonnaies, actions et actualités fonctionnent correctement:
-
-1. Créez un compte sur [Finnhub](https://finnhub.io/)
-2. Obtenez une clé API (la version gratuite permet 60 appels par minute)
-3. Ajoutez la clé à votre fichier `.env`:
-```
-VITE_FINNHUB_API_KEY=votre_cle_finnhub
-```
-4. Ajoutez également la clé dans les variables d'environnement de Supabase Edge Functions:
-```
-FINNHUB_API_KEY=votre_cle_finnhub
-```
 
 ## 5. Déploiement des Edge Functions
 
@@ -93,10 +94,15 @@ Pour vérifier que tout est correctement configuré:
 ### Les alertes ne se déclenchent pas
 - Vérifiez que la fonction Edge `check-crypto-alerts` est déployée
 - Assurez-vous que les tables SQL sont correctement créées
+- Vérifiez que la clé API Finnhub est configurée dans les variables d'environnement
 
 ### L'interface admin affiche une page blanche
 - Utilisez les identifiants corrects: username "discord" et password "123456"
 - Vérifiez que vous êtes connecté à Supabase
+
+### Les prix ne s'actualisent pas
+- Vérifiez que la clé API Finnhub est correctement configurée
+- Assurez-vous que vous n'avez pas dépassé la limite d'appels API (60/minute pour le plan gratuit)
 
 ## Support
 
