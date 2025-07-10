@@ -3,6 +3,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
+// Finnhub WebSocket pour les mises à jour en temps réel
+let finnhubSocket: WebSocket | null = null;
+
 interface PriceChartProps {
   symbol: string;
   marketType: 'crypto' | 'stock';
@@ -20,35 +23,70 @@ export function PriceChart({ symbol, marketType }: PriceChartProps) {
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef<number | null>(null);
 
+  // Fonction pour fermer le WebSocket
+  const closeWebSocket = () => {
+    if (finnhubSocket) {
+      finnhubSocket.close();
+      finnhubSocket = null;
+    }
+  };
+
   useEffect(() => {
     fetchPriceData();
     
     // Mettre à jour les prix toutes les 5 secondes
     intervalRef.current = window.setInterval(fetchPriceData, 5000);
     
+    // Initialiser le WebSocket pour les mises à jour en temps réel
+    initWebSocket();
+    
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      closeWebSocket();
     };
   }, [symbol, marketType]);
 
-  const fetchPriceData = async () => {
-    try {
-      setLoading(true);
-      
-      if (marketType === 'crypto') {
-        // Fetch crypto data from CoinGecko
-        const response = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${symbol.toLowerCase()}&vs_currencies=usd&include_24hr_change=true`
-        );
-        const data = await response.json();
-        const price = data[symbol.toLowerCase()]?.usd;
-        const change = data[symbol.toLowerCase()]?.usd_24h_change;
+  // Initialiser le WebSocket Finnhub
+  const initWebSocket = () => {
+    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+    if (!apiKey) {
+      console.error('Finnhub API key not found');
+      return;
+    }
+    
+    closeWebSocket();
+    
+    finnhubSocket = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
+    
+    finnhubSocket.onopen = () => {
+      console.log('Finnhub WebSocket connected');
+      // S'abonner au symbole
+      if (finnhubSocket && finnhubSocket.readyState === WebSocket.OPEN) {
+        const subscribeMsg = {
+          type: 'subscribe',
+          symbol: marketType === 'crypto' ? `BINANCE:${symbol.toUpperCase()}USDT` : symbol.toUpperCase()
+        };
+        finnhubSocket.send(JSON.stringify(subscribeMsg));
+      }
+    };
+    
+    finnhubSocket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'trade' && message.data && message.data.length > 0) {
+        const trade = message.data[0];
+        const price = trade.p;
         
         if (price) {
           setCurrentPrice(price);
-          setPriceChange(change || 0);
+          
+          // Calculer le changement de prix
+          if (data.length > 0) {
+            const firstPrice = data[0].price;
+            const change = ((price - firstPrice) / firstPrice) * 100;
+            setPriceChange(change);
+          }
           
           // Ajouter le nouveau prix aux données historiques
           setData(prevData => {
@@ -69,49 +107,164 @@ export function PriceChart({ symbol, marketType }: PriceChartProps) {
             return newData;
           });
         }
-      } else {
-        // Pour les actions, utiliser une API de marché boursier
-        // Pour cette démo, nous utilisons des prix simulés mais réalistes
-        const stockPrices = {
-          'AAPL': 175.43 + (Math.random() - 0.5) * 5,
-          'GOOGL': 2750.80 + (Math.random() - 0.5) * 50,
-          'MSFT': 378.85 + (Math.random() - 0.5) * 10,
-          'TSLA': 248.50 + (Math.random() - 0.5) * 15,
-          'AMZN': 3380.00 + (Math.random() - 0.5) * 70,
-          'NVDA': 875.30 + (Math.random() - 0.5) * 25,
-        };
+      }
+    };
+    
+    finnhubSocket.onerror = (error) => {
+      console.error('Finnhub WebSocket error:', error);
+    };
+    
+    finnhubSocket.onclose = () => {
+      console.log('Finnhub WebSocket disconnected');
+    };
+  };
+
+  const fetchPriceData = async () => {
+    try {
+      setLoading(true);
+      
+      if (marketType === 'crypto') {
+        // Fetch crypto data from Finnhub
+        const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+        if (!apiKey) {
+          console.error('Finnhub API key not found');
+          return;
+        }
         
-        const price = stockPrices[symbol.toUpperCase()] || (Math.random() * 200 + 50);
-        const change = (Math.random() - 0.5) * 6; // Entre -3% et +3%
+        const cryptoSymbol = symbol.toUpperCase();
+        const response = await fetch(
+          `https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:${cryptoSymbol}USDT&resolution=5&count=24&token=${apiKey}`
+        );
         
-        setCurrentPrice(price);
-        setPriceChange(change);
-        
-        // Ajouter le nouveau prix aux données historiques
-        setData(prevData => {
-          const newData = [...prevData];
-          const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        if (response.ok) {
+          const candleData = await response.json();
           
-          // Ajouter le nouveau point de données
-          newData.push({
-            time,
-            price: Number(price.toFixed(2))
-          });
-          
-          // Limiter à 24 points de données
-          if (newData.length > 24) {
-            return newData.slice(newData.length - 24);
+          if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
+            const prices = candleData.c;
+            const currentPrice = prices[prices.length - 1];
+            const firstPrice = prices[0];
+            const change = ((currentPrice - firstPrice) / firstPrice) * 100;
+            
+            setCurrentPrice(currentPrice);
+            setPriceChange(change);
+            
+            // Créer des données historiques à partir des chandeliers
+            const historicalData = prices.map((price, index) => {
+              const timestamp = candleData.t[index] * 1000;
+              const time = new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+              return {
+                time,
+                price: Number(price.toFixed(2))
+              };
+            });
+            
+            setData(historicalData);
           }
+        } else {
+          throw new Error(`Finnhub API error: ${response.statusText}`);
+        }
+        
+      } else {
+        // Fetch stock data from Finnhub
+        const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
+        if (!apiKey) {
+          console.error('Finnhub API key not found');
+          return;
+        }
+        
+        const stockSymbol = symbol.toUpperCase();
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${stockSymbol}&token=${apiKey}`
+        );
+        
+        if (response.ok) {
+          const quoteData = await response.json();
           
-          return newData;
-        });
+          if (quoteData.c) {
+            const currentPrice = quoteData.c;
+            const change = quoteData.dp || 0; // Changement en pourcentage
+            
+            setCurrentPrice(currentPrice);
+            setPriceChange(change);
+            
+            // Récupérer les données historiques
+            const candleResponse = await fetch(
+              `https://finnhub.io/api/v1/stock/candle?symbol=${stockSymbol}&resolution=5&count=24&token=${apiKey}`
+            );
+            
+            if (candleResponse.ok) {
+              const candleData = await candleResponse.json();
+              
+              if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
+                const prices = candleData.c;
+                
+                // Créer des données historiques à partir des chandeliers
+                const historicalData = prices.map((price, index) => {
+                  const timestamp = candleData.t[index] * 1000;
+                  const time = new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                  return {
+                    time,
+                    price: Number(price.toFixed(2))
+                  };
+                });
+                
+                setData(historicalData);
+              }
+            }
+          } else {
+            throw new Error(`Finnhub API error: No quote data for ${stockSymbol}`);
+          }
+        } else {
+          throw new Error(`Finnhub API error: ${response.statusText}`);
+        }
       }
     } catch (error) {
       console.error('Error fetching price data:', error);
+      // En cas d'erreur, utiliser des données simulées
+      if (data.length === 0) {
+        const simulatedData = generateSimulatedData();
+        setData(simulatedData);
+        
+        if (simulatedData.length > 0) {
+          const lastPrice = simulatedData[simulatedData.length - 1].price;
+          const firstPrice = simulatedData[0].price;
+          const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+          
+          setCurrentPrice(lastPrice);
+          setPriceChange(change);
+        }
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Générer des données simulées en cas d'erreur API
+  const generateSimulatedData = () => {
+    const data = [];
+    const basePrice = marketType === 'crypto' 
+      ? (symbol.toLowerCase() === 'btc' ? 45000 : symbol.toLowerCase() === 'eth' ? 3200 : 100)
+      : (symbol.toUpperCase() === 'AAPL' ? 175 : symbol.toUpperCase() === 'MSFT' ? 380 : 200);
+    
+    const now = new Date();
+    
+    for (let i = 0; i < 24; i++) {
+      const time = new Date(now.getTime() - (23 - i) * 5 * 60 * 1000);
+      const timeStr = time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      
+      // Générer un prix avec une légère variation
+      const variation = (Math.random() - 0.5) * 0.02; // ±1%
+      const price = basePrice * (1 + variation * i);
+      
+      data.push({
+        time: timeStr,
+        price: Number(price.toFixed(2))
+      });
+    }
+    
+    return data;
+  };
+        
 
   if (loading && data.length === 0) {
     return (
