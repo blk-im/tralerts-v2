@@ -24,155 +24,43 @@ export function TechnicalAnalysis({ onPremiumUpgrade }: TechnicalAnalysisProps) 
     fetchRealIndicators(selectedSymbol);
   }, [selectedSymbol]);
 
-  const fetchRealIndicators = async (symbol) => {
-    setLoading(true);
-    
-    // Utiliser Finnhub pour les indicateurs techniques
-    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-    if (!apiKey) {
-      console.error('Finnhub API key not found');
-      simulateIndicators(symbol);
-      setLoading(false);
-      return;
+  const fetchRealIndicators = async (symbol: string) => {
+  const resolution = '1';
+  const to = Math.floor(Date.now() / 1000);
+  const from = to - 60 * 60 * 24; // dernières 24h
+
+  try {
+    const response = await fetch(
+      `https://finnhub.io/api/v1/indicator?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}&indicator=macd&indicator=ema&indicator=bbands&indicator=rsi&indicator=sma&indicator=wma&indicator=cci&token=${import.meta.env.VITE_FINNHUB_API_KEY}`
+    );
+
+    const candleData = await response.json();
+
+    if (candleData.s !== 'ok' || !candleData.c || candleData.c.length === 0) {
+      console.error(`Invalid candle data for ${symbol}:`, candleData);
+      throw new Error(`Invalid candle data for ${symbol}`);
     }
-    
-    try {
-      // Déterminer si c'est une crypto ou une action
-      const isCrypto = ['BTC', 'ETH', 'ADA', 'SOL'].includes(symbol.toUpperCase());
-      
-      // Construire le symbole pour Finnhub
-      const finnhubSymbol = isCrypto 
-        ? `BINANCE:${symbol.toUpperCase()}USDT` 
-        : symbol.toUpperCase();
-      
-      console.log(`Fetching technical data for ${finnhubSymbol}`);
-      
-      // Récupérer les données de chandeliers
-      const candleResponse = await fetch(
-        `https://finnhub.io/api/v1/${isCrypto ? 'crypto' : 'stock'}/candle?symbol=${finnhubSymbol}&resolution=D&count=30&token=${apiKey}`
-      );
-      
-      if (candleResponse.ok) {
-        const candleData = await candleResponse.json();
-        
-        if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
-          // Extraire les prix de clôture
-          const prices = candleData.c;
-          const volumes = candleData.v || [];
-          
-          // Calculer RSI (Relative Strength Index)
-          const rsi = calculateRSI(prices);
-          
-          // Calculer MACD (Moving Average Convergence Divergence)
-          const macd = calculateMACD(prices);
-          
-          // Calculer Bollinger Bands
-          const bollinger = calculateBollingerBands(prices);
-          
-          // Récupérer le prix actuel
-          const quoteResponse = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${apiKey}`
-          );
-          
-          let currentPrice = prices[prices.length - 1];
-          if (quoteResponse.ok) {
-            const quoteData = await quoteResponse.json();
-            if (quoteData.c) {
-              currentPrice = quoteData.c;
-              console.log(`Current price for ${symbol}: $${currentPrice}`);
-            }
-          }
-          
-          // Mettre à jour les indicateurs
-          setIndicators([
-            { 
-              name: 'RSI', 
-              value: rsi, 
-              signal: rsi > 70 ? 'Surachat' : rsi < 30 ? 'Survente' : 'Neutre',
-              color: rsi > 70 ? 'red' : rsi < 30 ? 'green' : 'blue',
-              description: 'Relative Strength Index'
-            },
-            { 
-              name: 'MACD', 
-              value: macd.signal, 
-              signal: macd.histogram > 0 ? 'Achat' : 'Vente',
-              color: macd.histogram > 0 ? 'green' : 'red',
-              description: 'Moving Average Convergence Divergence'
-            },
-            { 
-              name: 'Bollinger', 
-              value: bollinger.position, 
-              signal: bollinger.signal,
-              color: bollinger.color,
-              description: 'Bollinger Bands'
-            },
-            { 
-              name: 'Momentum', 
-              value: calculateMomentum(prices), 
-              signal: calculateMomentum(prices) > 0 ? 'Positif' : 'Négatif',
-              color: calculateMomentum(prices) > 0 ? 'green' : 'red',
-              description: 'Price momentum (10 periods)'
-            },
-            { 
-              name: 'MA 50/200', 
-              value: calculateMovingAverageCrossover(prices) ? 'Croisement' : 'Séparé', 
-              signal: calculateMovingAverageCrossover(prices) ? 'Achat' : 'Attente',
-              color: calculateMovingAverageCrossover(prices) ? 'green' : 'blue',
-              description: 'Moving Average Crossover'
-            },
-            { 
-              name: 'Volume', 
-              value: calculateVolumeChange(volumes), 
-              signal: calculateVolumeChange(volumes) > 20 ? 'Fort' : 'Faible',
-              color: calculateVolumeChange(volumes) > 20 ? 'green' : 'blue',
-              description: 'Volume change (%)'
-            }
-          ]);
-          
-          // Générer des signaux basés sur les indicateurs
-          setSignals([
-            {
-              symbol: symbol,
-              signal: rsi < 30 ? 'Achat Fort' : rsi > 70 ? 'Vente' : macd.histogram > 0 ? 'Achat' : 'Neutre',
-              confidence: rsi < 30 || rsi > 70 ? 85 : 65,
-              price: currentPrice,
-              target: currentPrice * (rsi < 30 ? 1.1 : rsi > 70 ? 0.9 : macd.histogram > 0 ? 1.05 : 1),
-              stopLoss: currentPrice * (rsi < 30 ? 0.95 : rsi > 70 ? 1.05 : macd.histogram > 0 ? 0.97 : 1),
-              timeframe: '4H',
-              color: rsi < 30 || macd.histogram > 0 ? 'green' : rsi > 70 ? 'red' : 'blue',
-              reason: rsi < 30 ? 'RSI en survente + volume en hausse' : 
-                      rsi > 70 ? 'RSI en surachat + divergence baissière' : 
-                      macd.histogram > 0 ? 'Signal MACD positif + support' : 'Marché neutre'
-            }
-          ]);
-          
-          // Détecter des patterns
-          setPatterns([
-            { 
-              name: detectPattern(prices),
-              symbol: symbol,
-              probability: Math.floor(Math.random() * 20) + 60, 
-              direction: rsi < 40 ? 'Haussier' : rsi > 60 ? 'Baissier' : 'Neutre', 
-              timeframe: '4H' 
-            }
-          ]);
-        } else {
-          console.error(`Invalid candle data for ${symbol}:`, candleData);
-          throw new Error(`Invalid candle data for ${symbol}`);
-        } else {
-          throw new Error(`Invalid candle data for ${symbol}`);
-        }
-      } else {
-        console.error(`Failed to fetch candle data for ${symbol}:`, await candleResponse.text());
-        throw new Error(`Failed to fetch candle data for ${symbol}`);
-        }
-    } catch (error) {
-      console.error('Error fetching technical data:', error);
-      simulateIndicators(symbol);
-    } finally {
-      setLoading(false);
-    }
-  };
+
+    return {
+      macd: candleData.macd?.macd?.slice(-1)[0],
+      signal: candleData.macd?.signal?.slice(-1)[0],
+      ema: candleData.ema?.EMA?.slice(-1)[0],
+      bbands: {
+        upper: candleData.bbands?.upper?.slice(-1)[0],
+        middle: candleData.bbands?.middle?.slice(-1)[0],
+        lower: candleData.bbands?.lower?.slice(-1)[0],
+      },
+      rsi: candleData.rsi?.rsi?.slice(-1)[0],
+      sma: candleData.sma?.sma?.slice(-1)[0],
+      wma: candleData.wma?.wma?.slice(-1)[0],
+      cci: candleData.cci?.cci?.slice(-1)[0],
+      currentPrice: candleData.c.slice(-1)[0],
+    };
+  } catch (error) {
+    console.error(`Error fetching indicators for ${symbol}:`, error);
+    throw error;
+  }
+};
 
   // Fonctions de calcul d'indicateurs techniques
   const calculateRSI = (prices, periods = 14) => {
