@@ -35,6 +35,14 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
   const fetchPortfolio = async () => {
     try {
       setLoading(true);
+      
+      // Check if supabase is properly configured
+      if (!supabase) {
+        console.error('Supabase client not initialized');
+        setDemoPortfolio();
+        return;
+      }
+      
       console.log('Fetching portfolio data');
       
       // Vérifier si la table portfolio existe
@@ -43,7 +51,10 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
         .select('count(*)', { count: 'exact', head: true });
       
       if (tableCheckError) {
-        console.error('Error checking portfolio table:', tableCheckError);
+        console.error('Error checking portfolio table:', tableCheckError.message);
+        if (tableCheckError.code === 'PGRST116' || tableCheckError.message.includes('relation') || tableCheckError.message.includes('does not exist')) {
+          console.log('Portfolio table does not exist, using demo data');
+        }
         console.log('Using demo portfolio data');
         setDemoPortfolio();
         return;

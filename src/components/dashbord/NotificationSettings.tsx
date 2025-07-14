@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { useNotification } from '../../contexts/NotificationContext';
 import { FreeSMSTestButton } from './FreeSMSTestButton';
 import { useAuth } from '../../hooks/useAuth';
+import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface NotificationSettingsProps {
