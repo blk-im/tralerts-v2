@@ -1,239 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Eye, Plus, Trash2, TrendingUp, TrendingDown, Star, Search, Crown, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
-
-interface WatchlistItem {
-  id: string;
-  symbol: string;
-  name: string;
-  currentPrice: number;
-  change24h: number;
-  marketType: 'crypto' | 'stock';
-  isFavorite: boolean;
-}
+import { useWatchlist } from '../../hooks/useWatchlist';
+import { useRealTimeData } from '../../hooks/useRealTimeData';
 
 interface WatchlistManagerProps {
   onPremiumUpgrade?: () => void;
 }
 
 export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
-  const { user } = useAuth();
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const { watchlist, favorites, loading, addAsset, removeAsset, toggleFavorite, searchAssets, refresh } = useWatchlist();
   const [newSymbol, setNewSymbol] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMarket, setSelectedMarket] = useState<'all' | 'crypto' | 'stock'>('all');
   const [isFreePlan] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Charger la watchlist au démarrage
-  useEffect(() => {
-    if (user) {
-      fetchWatchlist();
-    } else {
-      setWatchlist([]);
-      setLoading(false);
-    }
-  }, [user]);
+  // Données temps réel pour les actifs de la watchlist
+  const symbols = watchlist.map(item => ({
+    symbol: item.symbol,
+    marketType: item.market_type
+  }));
 
-  const fetchWatchlist = async () => {
-    try {
-      setLoading(true);
-      
-      // Récupérer la watchlist depuis la base de données
-      const { data, error } = await supabase
-        .from('watchlist')
-        .select('*')
-        .eq('user_id', user?.id);
-      
-      if (error) {
-        console.error('Error fetching watchlist:', error);
-        setWatchlist([]);
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        // Récupérer les prix actuels
-        const items: WatchlistItem[] = await Promise.all(data.map(async (item) => {
-          const currentPrice = await fetchCurrentPrice(item.symbol, item.market_type);
-          const change24h = await fetchPriceChange(item.symbol, item.market_type);
-          
-          return {
-            id: item.id,
-            symbol: item.symbol,
-            name: getAssetName(item.symbol, item.market_type),
-            currentPrice,
-            change24h,
-            marketType: item.market_type,
-            isFavorite: item.is_favorite || false
-          };
-        }));
-        
-        setWatchlist(items);
-      } else {
-        setWatchlist([]);
-      }
-    } catch (error) {
-      console.error('Error in watchlist fetch:', error);
-      setWatchlist([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: realTimeData, refresh: refreshPrices } = useRealTimeData({
+    symbols,
+    refreshInterval: 30000, // 30 secondes
+    enabled: symbols.length > 0
+  });
 
-  // Récupérer le prix actuel d'un actif
-  const fetchCurrentPrice = async (symbol: string, marketType: string): Promise<number> => {
-    if (marketType === 'crypto') {
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        return getDefaultPrice(symbol, marketType);
-      }
-      
-      try {
-        // Utiliser Finnhub pour les cryptomonnaies
-        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.c) {
-            return data.c;
-          }
-        }
-        return getDefaultPrice(symbol, marketType);
-      } catch (error) {
-        console.error('Error fetching crypto price:', error);
-        return getDefaultPrice(symbol, marketType);
-      }
-    } else if (marketType === 'stock') {
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        return getDefaultPrice(symbol, marketType);
-      }
-      
-      try {
-        // Utiliser Finnhub pour les actions
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.c) {
-            return data.c;
-          }
-        }
-        return getDefaultPrice(symbol, marketType);
-      } catch (error) {
-        console.error('Error fetching stock price:', error);
-        return getDefaultPrice(symbol, marketType);
-      }
-    }
-    
-    return getDefaultPrice(symbol, marketType);
-  };
-
-  // Récupérer le changement de prix sur 24h
-  const fetchPriceChange = async (symbol: string, marketType: string): Promise<number> => {
-    if (marketType === 'crypto') {
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        return (Math.random() * 10 - 5);
-      }
-      
-      try {
-        // Utiliser Finnhub pour les cryptomonnaies
-        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.dp) {
-            return data.dp;
-          }
-        }
-        return (Math.random() * 10 - 5);
-      } catch (error) {
-        console.error('Error fetching crypto price change:', error);
-        return (Math.random() * 10 - 5);
-      }
-    } else if (marketType === 'stock') {
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        return (Math.random() * 6 - 3);
-      }
-      
-      try {
-        // Utiliser Finnhub pour les actions
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.dp) {
-            return data.dp;
-          }
-        }
-        return (Math.random() * 6 - 3);
-      } catch (error) {
-        console.error('Error fetching stock price change:', error);
-        return (Math.random() * 6 - 3);
-      }
-    }
-    
-    // Pour les actions ou en cas d'erreur, générer un changement réaliste
-    return (Math.random() * 6) - 3; // Entre -3% et +3%
-  };
-
-  // Prix par défaut pour les actifs non trouvés
-  const getDefaultPrice = (symbol: string, marketType: string): number => {
-    const prices: {[key: string]: number} = {
-      'bitcoin': 45000,
-      'ethereum': 3200,
-      'cardano': 0.45,
-      'solana': 98,
-      'AAPL': 175,
-      'GOOGL': 2750,
-      'MSFT': 378,
-      'TSLA': 250,
-      'AMZN': 3380,
-      'NVDA': 875
-    };
-    
-    return prices[symbol.toLowerCase()] || (marketType === 'crypto' ? 100 : 200);
-  };
-
-  // Noms des actifs
-  const getAssetName = (symbol: string, marketType: string): string => {
-    const names: {[key: string]: string} = {
-      'bitcoin': 'Bitcoin',
-      'ethereum': 'Ethereum',
-      'cardano': 'Cardano',
-      'solana': 'Solana',
-      'AAPL': 'Apple Inc.',
-      'GOOGL': 'Alphabet Inc.',
-      'MSFT': 'Microsoft Corp.',
-      'TSLA': 'Tesla Inc.',
-      'AMZN': 'Amazon.com Inc.',
-      'NVDA': 'NVIDIA Corp.'
-    };
-    
-    return names[symbol.toLowerCase()] || symbol;
-  };
-
-  const addToWatchlist = async () => {
+  const handleAddToWatchlist = async () => {
     if (!newSymbol.trim()) return;
 
     // Vérifier la limite du plan gratuit
@@ -242,169 +40,53 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
       return;
     }
 
-    try {
-      setLoading(true);
-      
-      // Déterminer le type de marché
-      const isCrypto = !newSymbol.match(/^[A-Z]{1,5}$/);
-      const marketType = isCrypto ? 'crypto' : 'stock';
-      const formattedSymbol = isCrypto ? newSymbol.toLowerCase() : newSymbol.toUpperCase();
-      
-      // Vérifier si l'actif existe déjà dans la watchlist
-      const exists = watchlist.some(item => 
-        item.symbol.toLowerCase() === formattedSymbol.toLowerCase() && 
-        item.marketType === marketType
-      );
-      
-      if (exists) {
-        alert(`${formattedSymbol} est déjà dans votre watchlist.`);
-        return;
-      }
-      
-      // Vérifier si la table watchlist existe
-      const { error: tableCheckError } = await supabase
-        .from('watchlist')
-        .select('count(*)', { count: 'exact', head: true })
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.error('Error checking watchlist table:', tableCheckError);
-        toast.error('Erreur de base de données. Veuillez configurer Supabase correctement.');
-        setLoading(false);
-        return;
-      }
-      
-      // Récupérer le prix actuel
-      let currentPrice = 0;
-      let change24h = 0;
-      
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        currentPrice = getDefaultPrice(formattedSymbol, marketType);
-        change24h = (Math.random() * 6) - 3;
-      } else {
-        try {
-          // Utiliser Finnhub pour récupérer les prix
-          const finnhubSymbol = marketType === 'crypto' 
-            ? `BINANCE:${formattedSymbol.toUpperCase()}USDT` 
-            : formattedSymbol.toUpperCase();
-          
-          const response = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${apiKey}`
-          );
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.c) {
-              currentPrice = data.c;
-              change24h = data.dp || ((Math.random() * 6) - 3);
-            } else {
-              throw new Error(`No price data for ${finnhubSymbol}`);
-            }
-          } else {
-            throw new Error(`Failed to fetch price for ${finnhubSymbol}`);
-          }
-        } catch (priceError) {
-          console.error('Error fetching price:', priceError);
-          currentPrice = getDefaultPrice(formattedSymbol, marketType);
-          change24h = (Math.random() * 6) - 3;
-        }
-      }
-      
-      // Ajouter à la base de données
-      const { data, error } = await supabase
-        .from('watchlist')
-        .insert({
-          user_id: user?.id,
-          symbol: formattedSymbol,
-          market_type: marketType,
-          is_favorite: false
-        })
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('Error adding to watchlist:', error);
-        toast.error('Erreur lors de l\'ajout à la watchlist');
-        return;
-      }
-      
-      // Ajouter à l'état local
-      const newItem: WatchlistItem = {
-        id: data.id,
-        symbol: formattedSymbol,
-        name: getAssetName(formattedSymbol, marketType),
-        currentPrice,
-        change24h,
-        marketType,
-        isFavorite: false
-      };
-      
-      setWatchlist(prev => [newItem, ...prev]);
-      setNewSymbol('');
-    } catch (error) {
-      console.error('Error adding to watchlist:', error);
-      toast.error('Erreur lors de l\'ajout à la watchlist');
-    } finally {
-      setLoading(false);
+    // Déterminer le type de marché
+    const isCrypto = !newSymbol.match(/^[A-Z]{1,5}$/);
+    const marketType = isCrypto ? 'crypto' : 'stock';
+    const formattedSymbol = isCrypto ? newSymbol.toLowerCase() : newSymbol.toUpperCase();
+
+    await addAsset(formattedSymbol, marketType);
+    setNewSymbol('');
+  };
+
+  const handleRemoveFromWatchlist = async (watchlistId: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cet actif de votre watchlist ?')) {
+      await removeAsset(watchlistId);
     }
   };
 
-  const removeFromWatchlist = async (id: string) => {
-    try {
-      // Supprimer de la base de données
-      const { error } = await supabase
-        .from('watchlist')
-        .delete()
-        .eq('id', id);
-      
-      if (error) {
-        console.error('Error removing from watchlist:', error);
-        toast.error('Erreur lors de la suppression');
-        return;
+  const handleToggleFavorite = async (watchlistId: string, isFavorite: boolean) => {
+    await toggleFavorite(watchlistId, !isFavorite);
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchTerm(query);
+    
+    if (query.length > 2) {
+      setIsSearching(true);
+      try {
+        const results = await searchAssets(query);
+        setSearchResults(results.slice(0, 5)); // Limiter à 5 résultats
+      } catch (error) {
+        console.error('Error searching:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
       }
-      
-      // Mettre à jour l'état local
-      setWatchlist(prev => prev.filter(item => item.id !== id));
-    } catch (error) {
-      console.error('Error removing from watchlist:', error);
-      toast.error('Erreur lors de la suppression');
+    } else {
+      setSearchResults([]);
     }
   };
 
-  const toggleFavorite = async (id: string) => {
-    try {
-      // Trouver l'élément dans la watchlist
-      const item = watchlist.find(item => item.id === id);
-      if (!item) return;
-      
-      // Mettre à jour dans la base de données
-      const { error } = await supabase
-        .from('watchlist')
-        .update({ is_favorite: !item.isFavorite })
-        .eq('id', id);
-      
-      if (error) {
-        console.error('Error toggling favorite:', error);
-        toast.error('Erreur lors de la mise à jour');
-        return;
-      }
-      
-      // Mettre à jour l'état local
-      setWatchlist(prev => prev.map(item => 
-        item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
-      ));
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-      toast.error('Erreur lors de la mise à jour');
-    }
+  const handleRefresh = () => {
+    refresh();
+    refreshPrices();
   };
 
   const filteredWatchlist = watchlist.filter(item => {
-    const matchesSearch = item.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = !searchTerm || item.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesMarket = selectedMarket === 'all' || item.marketType === selectedMarket;
+    const matchesMarket = selectedMarket === 'all' || item.market_type === selectedMarket;
     return matchesSearch && matchesMarket;
   });
 
@@ -417,7 +99,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
     }).format(price);
   };
 
-  const assetsRemaining = Math.max(0, 10 - watchlist.length);
+  const assetsRemaining = Math.max(0, 10 - (watchlist?.length || 0));
 
   const handleUpgradeClick = () => {
     if (onPremiumUpgrade) {
@@ -443,7 +125,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
               </div>
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              {watchlist.length} actif{watchlist.length > 1 ? 's' : ''} surveillé{watchlist.length > 1 ? 's' : ''}
+              {watchlist?.length || 0} actif{(watchlist?.length || 0) > 1 ? 's' : ''} surveillé{(watchlist?.length || 0) > 1 ? 's' : ''}
               {isFreePlan && <span> / 10 max</span>}
             </div>
           </div>
@@ -471,7 +153,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
               <div className="w-full bg-purple-200 dark:bg-purple-800 rounded-full h-2 mb-3">
                 <div 
                   className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(watchlist.length / 10) * 100}%` }}
+                  style={{ width: `${((watchlist?.length || 0) / 10) * 100}%` }}
                 ></div>
               </div>
               
@@ -504,11 +186,11 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
                 placeholder="Ajouter un symbole (ex: BTC, AAPL)"
                 value={newSymbol}
                 onChange={(e) => setNewSymbol(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addToWatchlist()}
+                onKeyPress={(e) => e.key === 'Enter' && handleAddToWatchlist()}
               />
             </div>
             <Button
-              onClick={addToWatchlist}
+              onClick={handleAddToWatchlist}
               disabled={isFreePlan && assetsRemaining === 0}
               className={`${
                 isFreePlan && assetsRemaining === 0
@@ -530,6 +212,24 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
             </Button>
           </div>
 
+          {/* Search results */}
+          {searchResults.length > 0 && (
+            <div className="mb-4 bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <p className="text-sm font-medium mb-2">Résultats de recherche :</p>
+              <div className="space-y-1">
+                {searchResults.map((result, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setNewSymbol(result.symbol)}
+                    className="block w-full text-left text-sm p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                  >
+                    {result.symbol} - {result.description}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -538,7 +238,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
                 <Input
                   placeholder="Rechercher dans la watchlist..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearch(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -601,7 +301,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white ${
-                      item.marketType === 'crypto' 
+                      item.market_type === 'crypto' 
                         ? 'bg-gradient-to-r from-orange-500 to-orange-600' 
                         : 'bg-gradient-to-r from-blue-500 to-blue-600'
                     }`}>
@@ -614,11 +314,11 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
                           {item.symbol}
                         </h3>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          item.marketType === 'crypto' 
+                          item.market_type === 'crypto' 
                             ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
                             : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                         }`}>
-                          {item.marketType === 'crypto' ? 'CRYPTO' : 'ACTION'}
+                          {item.market_type === 'crypto' ? 'CRYPTO' : 'ACTION'}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -630,37 +330,37 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
                   <div className="flex items-center space-x-4">
                     <div className="text-right">
                       <p className="text-lg font-bold text-gray-900 dark:text-white">
-                        {formatPrice(item.currentPrice)}
+                        {formatPrice(item.current_price)}
                       </p>
                       <div className={`flex items-center ${
-                        item.change24h >= 0 ? 'text-green-600' : 'text-red-600'
+                        item.change_24h_percentage >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {item.change24h >= 0 ? (
+                        {item.change_24h_percentage >= 0 ? (
                           <TrendingUp className="w-3 h-3 mr-1" />
                         ) : (
                           <TrendingDown className="w-3 h-3 mr-1" />
                         )}
                         <span className="text-sm font-medium">
-                          {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
+                          {item.change_24h_percentage >= 0 ? '+' : ''}{item.change_24h_percentage.toFixed(2)}%
                         </span>
                       </div>
                     </div>
 
                     <div className="flex items-center space-x-2">
                       <Button
-                        onClick={() => toggleFavorite(item.id)}
+                        onClick={() => handleToggleFavorite(item.id, item.is_favorite)}
                         variant="ghost"
                         size="sm"
                         className="p-2"
                       >
                         <Star className={`w-4 h-4 ${
-                          item.isFavorite 
+                          item.is_favorite 
                             ? 'text-yellow-500 fill-current' 
                             : 'text-gray-400'
                         }`} />
                       </Button>
                       <Button
-                        onClick={() => removeFromWatchlist(item.id)}
+                        onClick={() => handleRemoveFromWatchlist(item.id)}
                         variant="ghost"
                         size="sm"
                         className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -687,7 +387,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
               Ajoutez des cryptomonnaies et actions pour les surveiller facilement.
             </p>
             <Button
-              onClick={() => setNewSymbol('bitcoin')}
+              onClick={() => setNewSymbol('BTC')}
               disabled={isFreePlan && assetsRemaining === 0}
               className={`${
                 isFreePlan && assetsRemaining === 0
@@ -696,11 +396,19 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
               } text-white`}
             >
               <Plus className="w-4 h-4 mr-2" />
-              {isFreePlan && assetsRemaining === 0 ? 'Premium requis' : 'Ajouter Bitcoin'}
+              {isFreePlan && assetsRemaining === 0 ? 'Premium requis' : 'Ajouter BTC'}
             </Button>
           </CardContent>
         </Card>
       )}
+
+      {/* Bouton de rafraîchissement */}
+      <div className="text-center">
+        <Button onClick={handleRefresh} variant="secondary" size="sm">
+          <Eye className="w-4 h-4 mr-2" />
+          Actualiser les prix
+        </Button>
+      </div>
 
       {/* Premium Upgrade CTA */}
       {isFreePlan && (
@@ -751,7 +459,7 @@ export function WatchlistManager({ onPremiumUpgrade }: WatchlistManagerProps) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {['bitcoin', 'ethereum', 'AAPL', 'GOOGL', 'cardano', 'solana', 'TSLA', 'MSFT'].map((symbol) => (
+            {['BTC', 'ETH', 'AAPL', 'GOOGL', 'ADA', 'SOL', 'TSLA', 'MSFT'].map((symbol) => (
               <Button
                 key={symbol}
                 onClick={() => setNewSymbol(symbol)}
