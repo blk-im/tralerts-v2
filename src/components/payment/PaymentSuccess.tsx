@@ -231,3 +231,4 @@ export function PaymentSuccess({ plan, onContinue }: PaymentSuccessProps) {
     </div>
   );
 }
+

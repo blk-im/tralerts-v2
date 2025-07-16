@@ -1,240 +1,84 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Activity, Plus, Crown, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
+import { Input } from '../ui/Input';
+import { usePortfolio } from '../../hooks/usePortfolio';
+import { useRealTimeData } from '../../hooks/useRealTimeData';
 
-interface PortfolioItem {
-  symbol: string;
-  name: string;
-  amount: number;
-  currentPrice: number;
-  change24h: number;
-  marketType: 'crypto' | 'stock';
+interface AddAssetModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (symbol: string, marketType: 'crypto' | 'stock', quantity: number, averagePrice: number) => void;
 }
 
-interface PortfolioProps {
-  onPremiumUpgrade?: () => void;
-}
+function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
+  const [symbol, setSymbol] = useState('');
+  const [marketType, setMarketType] = useState<'crypto' | 'stock'>('crypto');
+  const [quantity, setQuantity] = useState('');
+  const [averagePrice, setAveragePrice] = useState('');
 
-export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
-  const { user } = useAuth();
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
-  const [totalValue, setTotalValue] = useState(0);
-  const [totalChange, setTotalChange] = useState(0);
-  const [isFreePlan] = useState(true); // Simulation - en production, récupérer depuis l'utilisateur
-  const [loading, setLoading] = useState(true);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!symbol || !quantity || !averagePrice) return;
 
-  useEffect(() => {
-    if (user) {
-      fetchPortfolio();
-    }
-  }, [user]);
+    onAdd(symbol, marketType, parseFloat(quantity), parseFloat(averagePrice));
+    setSymbol('');
+    setQuantity('');
+    setAveragePrice('');
+    onClose();
+  };
 
-  const fetchPortfolio = async () => {
-    try {
-      setLoading(true);
-      
-      // Check if supabase is properly configured
-      if (!supabase) {
-        console.error('Supabase client not initialized');
-        setDemoPortfolio();
-        return;
-      }
-      
-      console.log('Fetching portfolio data');
-      
-      // Vérifier si la table portfolio existe
-      const { error: tableCheckError } = await supabase
-        .from('portfolio')
-        .select('count(*)', { count: 'exact', head: true });
-      
-      if (tableCheckError) {
-        console.error('Error checking portfolio table:', tableCheckError.message);
-        if (tableCheckError.code === 'PGRST116' || tableCheckError.message.includes('relation') || tableCheckError.message.includes('does not exist')) {
-          console.log('Portfolio table does not exist, using demo data');
-        }
-        console.log('Using demo portfolio data');
-        setDemoPortfolio();
-        return;
-      }
-      
-      // Récupérer le portfolio de l'utilisateur depuis la base de données
-      const { data: portfolioData, error } = await supabase
-        .from('portfolio')
-        .select('*')
-        .eq('user_id', user?.id);
-      
-      if (error) {
-        console.error('Error fetching portfolio:', error);
-        console.log('Using demo portfolio data due to error');
-        setDemoPortfolio();
-        return;
-      }
-      
-      if (portfolioData && portfolioData.length > 0) {
-        // Convertir les données de la base en PortfolioItem
-        const items: PortfolioItem[] = await Promise.all(portfolioData.map(async (item) => {
-          // Récupérer le prix actuel (pour une démo, on utilise des prix simulés)
-          let currentPrice;
-          try {
-            currentPrice = await fetchCurrentPrice(item.symbol, item.market_type);
-          } catch (error) {
-            console.error(`Error fetching price for ${item.symbol}:`, error);
-            currentPrice = getDefaultPrice(item.symbol, item.market_type);
-          }
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md">
+        <h3 className="text-lg font-semibold mb-4">Ajouter un actif</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Type de marché</label>
+            <div className="flex space-x-2">
+              <Button
+                type="button"
+                variant={marketType === 'crypto' ? 'primary' : 'secondary'}
+                onClick={() => setMarketType('crypto')}
+                size="sm"
+              >
+                Crypto
+              </Button>
+              <Button
+                type="button"
+                variant={marketType === 'stock' ? 'primary' : 'secondary'}
+                onClick={() => setMarketType('stock')}
+                size="sm"
+              >
+                Action
+              </Button>
+            </div>
+          </div>
           
-          return {
-            symbol: item.symbol,
-            name: getAssetName(item.symbol, item.market_type),
-            amount: item.quantity,
-            currentPrice,
-            change24h: (Math.random() - 0.5) * 10, // Simuler un changement de prix
-            marketType: item.market_type
-          };
-        }));
-        
-        setPortfolio(items);
-        
-        // Calculer la valeur totale
-        const total = items.reduce((sum, item) => sum + (item.amount * item.currentPrice), 0);
-        setTotalValue(total);
-        
-        // Calculer le changement total pondéré
-        const weightedChange = items.reduce((sum, item) => {
-          const weight = (item.amount * item.currentPrice) / total;
-          return sum + (item.change24h * weight);
-        }, 0);
-        setTotalChange(weightedChange);
-      } else {
-        // Aucun élément dans le portfolio, utiliser des données vides
-        setPortfolio([]);
-        setTotalValue(0);
-        setTotalChange(0);
-      }
-    } catch (error) {
-      console.error('Error in portfolio fetch:', error);
-      console.log('Using demo portfolio data due to error');
-      setDemoPortfolio();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fonction pour obtenir un prix actuel (simulé pour la démo)
-  const fetchCurrentPrice = async (symbol: string, marketType: string): Promise<number> => {
-    if (marketType === 'crypto') {
-      // Utiliser Finnhub pour les cryptomonnaies
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        return getDefaultPrice(symbol, marketType);
-      }
-      
-      try {
-        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
-        console.log(`Fetching crypto price for ${cryptoSymbol}`);
-        
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${cryptoSymbol}&token=${apiKey}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.c) {
-            console.log(`Got price for ${symbol}: $${data.c}`);
-            return data.c;
-          }
-          console.error('No price data in response:', data);
-          return getDefaultPrice(symbol, marketType);
-        }
-        console.error('Error response from Finnhub:', await response.text());
-        return getDefaultPrice(symbol, marketType);
-      } catch (error) {
-        console.error('Error fetching crypto price:', error);
-        return getDefaultPrice(symbol, marketType);
-      }
-    } else if (marketType === 'stock') {
-      // Utiliser Finnhub pour les actions
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey) {
-        console.error('Finnhub API key not found');
-        return getDefaultPrice(symbol, marketType);
-      }
-      
-      try {
-        const stockSymbol = symbol.toUpperCase();
-        console.log(`Fetching stock price for ${stockSymbol}`);
-        
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${apiKey}`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.c) {
-            console.log(`Got price for ${symbol}: $${data.c}`);
-            return data.c;
-          }
-          console.error('No price data in response:', data);
-          return getDefaultPrice(symbol, marketType);
-        }
-        console.error('Error response from Finnhub:', await response.text());
-        return getDefaultPrice(symbol, marketType);
-      } catch (error) {
-        console.error('Error fetching stock price:', error);
-        return getDefaultPrice(symbol, marketType);
-      }
-    }
-    
-    return getDefaultPrice(symbol, marketType);
-  };
-
-  // Prix par défaut pour la démo
-  const getDefaultPrice = (symbol: string, marketType: string): number => {
-    const prices: {[key: string]: number} = {
-      'bitcoin': 85000,
-      'ethereum': 5200,
-      'cardano': 1.45,
-      'solana': 198,
-      'AAPL': 275,
-      'GOOGL': 3750,
-      'MSFT': 478,
-      'TSLA': 350,
-      'AMZN': 4380,
-      'NVDA': 1275
-    };
-    
-    return prices[symbol.toLowerCase()] || (marketType === 'crypto' ? 100 : 200);
-  };
-
-  // Noms des actifs pour la démo
-  const getAssetName = (symbol: string, marketType: string): string => {
-    const names: {[key: string]: string} = {
-      'bitcoin': 'Bitcoin',
-      'ethereum': 'Ethereum',
-      'cardano': 'Cardano',
-      'solana': 'Solana',
-      'AAPL': 'Apple Inc.',
-      'GOOGL': 'Alphabet Inc.',
-      'MSFT': 'Microsoft Corp.',
-      'TSLA': 'Tesla Inc.',
-      'AMZN': 'Amazon.com Inc.',
-      'NVDA': 'NVIDIA Corp.'
-    };
-    
-    return names[symbol.toLowerCase()] || symbol;
-  };
-
-  // Utiliser des données de démonstration
-  const setDemoPortfolio = () => {
-    // Pas de données de démo par défaut - portfolio vide
-    setPortfolio([]); // Portfolio vide par défaut
-    setTotalValue(0);
-    setTotalChange(0);
-  };
-
+          <Input
+            label="Symbole"
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            placeholder={marketType === 'crypto' ? 'BTC, ETH...' : 'AAPL, GOOGL...'}
+            required
+          />
+          
+          <Input
+            label="Quantité"
+            type="number"
+            step="any"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="0.5"
+            required
+          />
+          
+          <Input
+            label="Prix moyen d'achat (USD)"
+            type="number"
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -244,17 +88,12 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
     }).format(value);
   };
 
-  const assetsRemaining = Math.max(0, 5 - portfolio.length);
+  const assetsRemaining = Math.max(0, 5 - (portfolio?.length || 0));
 
   const handleUpgradeClick = () => {
     if (onPremiumUpgrade) {
       onPremiumUpgrade();
     }
-  };
-
-  const handleAddAsset = async () => {
-    // Rediriger vers un formulaire d'ajout d'actif ou ouvrir une modal
-    alert('Fonctionnalité d\'ajout d\'actif à implémenter');
   };
 
   if (loading) {
@@ -351,14 +190,14 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
                     ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
                 }`}>
-                  {assetsRemaining} places restantes
+                  {(stats?.totalProfitLossPercentage || 0) >= 0 ? '+' : ''}{(stats?.totalProfitLossPercentage || 0).toFixed(2)}%
                 </span>
               </div>
               
               <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mb-3">
                 <div 
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(portfolio.length / 5) * 100}%` }}
+                  style={{ width: `${((portfolio?.length || 0) / 5) * 100}%` }}
                 ></div>
               </div>
               
@@ -392,8 +231,8 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
               <BarChart3 className="w-5 h-5 mr-2" />
-              Mes positions
-            </h3>
+              <div className={`flex items-center ${(stats?.totalProfitLossPercentage || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {(stats?.totalProfitLossPercentage || 0) >= 0 ? (
             <Button
               disabled={isFreePlan && assetsRemaining === 0}
               className={`${
@@ -402,7 +241,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
                   : 'bg-blue-600 hover:bg-blue-700'
               } text-white`}
               size="sm"
-              onClick={isFreePlan && assetsRemaining === 0 ? handleUpgradeClick : handleAddAsset}
+              onClick={isFreePlan && assetsRemaining === 0 ? handleUpgradeClick : () => setShowAddModal(true)}
             >
               {isFreePlan && assetsRemaining === 0 ? (
                 <>
@@ -419,7 +258,7 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
           </div>
         </CardHeader>
         <CardContent>
-          {portfolio.length === 0 ? (
+          {!portfolio || portfolio.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-primary-100 to-crypto-100 dark:from-primary-900/20 dark:to-crypto-900/20 rounded-full flex items-center justify-center">
                 <PieChart className="w-8 h-8 text-primary-600 dark:text-primary-400" />
@@ -427,11 +266,11 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Votre portfolio est vide
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                Ajoutez vos premiers actifs pour commencer à suivre votre portfolio.
+                {portfolio?.length || 0}
+                {formatCurrency(stats?.totalValue || 0)}
               </p>
               <Button
-                onClick={handleAddAsset}
+                onClick={() => setShowAddModal(true)}
                 className="bg-gradient-to-r from-primary-600 to-crypto-600 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -441,14 +280,14 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
           ) : (
             <div className="space-y-4">
               {portfolio.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div key={item.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <div className="flex items-center space-x-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white ${
-                      item.marketType === 'crypto' 
+                      item.market_type === 'crypto' 
                         ? 'bg-gradient-to-r from-crypto-500 to-crypto-600' 
                         : 'bg-gradient-to-r from-blue-500 to-blue-600'
                     }`}>
-                      {item.marketType === 'crypto' 
+                      {item.market_type === 'crypto' 
                         ? item.symbol.slice(0, 3).toUpperCase()
                         : item.symbol
                       }
@@ -458,25 +297,33 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
                         {item.name}
                       </h4>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {item.amount} {item.marketType === 'crypto' ? item.symbol.toUpperCase() : 'actions'}
+                        {item.quantity} {item.market_type === 'crypto' ? item.symbol.toUpperCase() : 'actions'}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-gray-900 dark:text-white">
-                      {formatCurrency(item.amount * item.currentPrice)}
+                      {formatCurrency(item.total_value)}
                     </p>
-                    <div className={`flex items-center justify-end ${
-                      item.change24h >= 0 ? 'text-green-600' : 'text-red-600'
+                    <div className={`flex items-center justify-end space-x-2 ${
+                      item.profit_loss_percentage >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {item.change24h >= 0 ? (
+                      {item.profit_loss_percentage >= 0 ? (
                         <TrendingUp className="w-3 h-3 mr-1" />
                       ) : (
                         <TrendingDown className="w-3 h-3 mr-1" />
                       )}
                       <span className="text-sm">
-                        {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
+                        {item.profit_loss_percentage >= 0 ? '+' : ''}{item.profit_loss_percentage.toFixed(2)}%
                       </span>
+                      <Button
+                        onClick={() => handleRemoveAsset(item.id)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 p-1"
+                      >
+                        ×
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -485,6 +332,14 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Bouton de rafraîchissement */}
+      <div className="text-center">
+        <Button onClick={handleRefresh} variant="secondary" size="sm">
+          <Activity className="w-4 h-4 mr-2" />
+          Actualiser les prix
+        </Button>
+      </div>
 
       {/* Premium Upgrade CTA */}
       {isFreePlan && (
@@ -525,6 +380,13 @@ export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal d'ajout d'actif */}
+      <AddAssetModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddAsset}
+      />
     </div>
   );
 }

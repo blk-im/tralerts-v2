@@ -488,3 +488,4 @@ export function PaymentPage({ selectedPlan, onBack, onSuccess }: PaymentPageProp
     </div>
   );
 }
+
