@@ -79,6 +79,42 @@ function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
           <Input
             label="Prix moyen d'achat (USD)"
             type="number"
+            step="any"
+            value={averagePrice}
+            onChange={(e) => setAveragePrice(e.target.value)}
+            placeholder="50000"
+            required
+          />
+          
+          <div className="flex space-x-2">
+            <Button type="submit" className="flex-1">
+              Ajouter
+            </Button>
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+              Annuler
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface PortfolioProps {
+  onPremiumUpgrade?: () => void;
+}
+
+export function Portfolio({ onPremiumUpgrade }: PortfolioProps) {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const { 
+    portfolio, 
+    loading, 
+    stats, 
+    addAsset: handleAddAsset, 
+    removeAsset: handleRemoveAsset, 
+    refreshPortfolio: handleRefresh 
+  } = usePortfolio();
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -88,6 +124,9 @@ function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
     }).format(value);
   };
 
+  const totalValue = stats?.totalValue || 0;
+  const totalChange = stats?.totalProfitLossPercentage || 0;
+  const isFreePlan = true; // This should come from user subscription status
   const assetsRemaining = Math.max(0, 5 - (portfolio?.length || 0));
 
   const handleUpgradeClick = () => {
@@ -161,7 +200,7 @@ function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Assets</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {portfolio.length}
+                  {portfolio?.length || 0}
                   {isFreePlan && <span className="text-sm text-gray-500">/5</span>}
                 </p>
               </div>
@@ -190,7 +229,7 @@ function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
                     ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
                 }`}>
-                  {(stats?.totalProfitLossPercentage || 0) >= 0 ? '+' : ''}{(stats?.totalProfitLossPercentage || 0).toFixed(2)}%
+                  {assetsRemaining} restant{assetsRemaining > 1 ? 's' : ''}
                 </span>
               </div>
               
@@ -231,8 +270,8 @@ function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
               <BarChart3 className="w-5 h-5 mr-2" />
-              <div className={`flex items-center ${(stats?.totalProfitLossPercentage || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {(stats?.totalProfitLossPercentage || 0) >= 0 ? (
+              Portfolio ({portfolio?.length || 0} actifs)
+            </h3>
             <Button
               disabled={isFreePlan && assetsRemaining === 0}
               className={`${
@@ -266,8 +305,8 @@ function AddAssetModal({ isOpen, onClose, onAdd }: AddAssetModalProps) {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Votre portfolio est vide
               </h3>
-                {portfolio?.length || 0}
-                {formatCurrency(stats?.totalValue || 0)}
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Commencez par ajouter vos premiers actifs pour suivre vos investissements.
               </p>
               <Button
                 onClick={() => setShowAddModal(true)}
