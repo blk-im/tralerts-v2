@@ -174,4 +174,4 @@ export const checkFinnhubConnection = async (): Promise<boolean> => {
     console.error('Finnhub connection test failed:', error);
     return false;
   }
-};</parameter>
+};
