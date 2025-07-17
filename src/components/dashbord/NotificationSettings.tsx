@@ -69,7 +69,7 @@ export function NotificationSettings({ onSave }: NotificationSettingsProps) {
         .from('user_preferences')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       
       if (error) {
         console.error('Error loading user preferences:', error);
