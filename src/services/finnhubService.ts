@@ -164,3 +164,14 @@ class FinnhubService {
 
 export const finnhubService = new FinnhubService();
 export default finnhubService;
+
+// Fonction utilitaire pour vérifier si l'API est configurée
+export const checkFinnhubConnection = async (): Promise<boolean> => {
+  try {
+    const quote = await finnhubService.getQuote('AAPL', 'stock');
+    return quote && typeof quote.c === 'number' && quote.c > 0;
+  } catch (error) {
+    console.error('Finnhub connection test failed:', error);
+    return false;
+  }
+};</parameter>

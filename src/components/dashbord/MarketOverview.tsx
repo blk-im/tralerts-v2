@@ -48,9 +48,9 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     setLoading(true);
     
     const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-    if (!apiKey) {
-      console.error('Finnhub API key not found');
-      setFallbackData();
+    if (!apiKey || apiKey === 'placeholder-key') {
+      console.error('Finnhub API key not configured properly');
+      alert('⚠️ Clé API Finnhub manquante ! Veuillez configurer VITE_FINNHUB_API_KEY dans le fichier .env');
       return;
     }
     
@@ -59,14 +59,18 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       const cryptoSymbols = ['BINANCE:BTCUSDT', 'BINANCE:ETHUSDT', 'BINANCE:SOLUSDT', 'BINANCE:ADAUSDT', 'BINANCE:BNBUSDT'];
       const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'JPM', 'V', 'WMT'];
       
+      console.log('🔄 Récupération des prix réels depuis Finnhub...');
+      
       // Récupérer les données pour les cryptos
       const cryptoData = await Promise.all(
         cryptoSymbols.map(async (symbol) => {
           try {
+            console.log(`Fetching crypto: ${symbol}`);
             const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
             
             if (response.ok) {
               const data = await response.json();
+              console.log(`${symbol} response:`, data);
               if (data.c) {
                 const baseSymbol = symbol.split(':')[1].replace('USDT', '');
                 return {
@@ -78,6 +82,8 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
                   type: 'crypto' as const
                 };
               }
+            } else {
+              console.error(`Failed to fetch ${symbol}:`, response.status, response.statusText);
             }
             return null;
           } catch (error) {
@@ -91,10 +97,12 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       const stockData = await Promise.all(
         stockSymbols.map(async (symbol) => {
           try {
+            console.log(`Fetching stock: ${symbol}`);
             const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
             
             if (response.ok) {
               const data = await response.json();
+              console.log(`${symbol} response:`, data);
               if (data.c) {
                 return {
                   symbol,
@@ -106,6 +114,8 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
                   type: 'stock' as const
                 };
               }
+            } else {
+              console.error(`Failed to fetch ${symbol}:`, response.status, response.statusText);
             }
             return null;
           } catch (error) {
@@ -119,41 +129,20 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       const combinedData = [...cryptoData, ...stockData].filter(Boolean) as MarketItem[];
       
       if (combinedData.length > 0) {
+        console.log('✅ Données réelles récupérées:', combinedData.length, 'actifs');
         setMarketData(combinedData);
       } else {
-        console.warn('No market data received from Finnhub');
-        setFallbackData();
+        console.error('❌ Aucune donnée reçue de Finnhub - Vérifiez votre clé API');
+        alert('❌ Impossible de récupérer les données de Finnhub. Vérifiez votre clé API dans le fichier .env');
       }
     } catch (error) {
       console.error('Error fetching market data:', error);
-      setFallbackData();
+      alert('❌ Erreur lors de la récupération des données: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const setFallbackData = () => {
-    // Données de secours en cas d'erreur API
-    const fallbackData: MarketItem[] = [
-      { symbol: 'BTC', name: 'Bitcoin', price: 85000, change24h: 2.5, volume24h: 45000000000, type: 'crypto' },
-      { symbol: 'ETH', name: 'Ethereum', price: 5200, change24h: 3.2, volume24h: 25000000000, type: 'crypto' },
-      { symbol: 'SOL', name: 'Solana', price: 198, change24h: 5.7, volume24h: 8000000000, type: 'crypto' },
-      { symbol: 'ADA', name: 'Cardano', price: 1.45, change24h: -1.2, volume24h: 3000000000, type: 'crypto' },
-      { symbol: 'BNB', name: 'Binance Coin', price: 650, change24h: 0.8, volume24h: 2000000000, type: 'crypto' },
-      { symbol: 'AAPL', name: 'Apple Inc.', price: 275, change24h: 1.2, marketCap: 2800000000000, type: 'stock' },
-      { symbol: 'MSFT', name: 'Microsoft Corp.', price: 478, change24h: 0.9, marketCap: 2500000000000, type: 'stock' },
-      { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 3750, change24h: -0.5, marketCap: 1900000000000, type: 'stock' },
-      { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 4380, change24h: 2.1, marketCap: 1800000000000, type: 'stock' },
-      { symbol: 'TSLA', name: 'Tesla Inc.', price: 350, change24h: -1.8, marketCap: 1100000000000, type: 'stock' },
-      { symbol: 'NVDA', name: 'NVIDIA Corp.', price: 1275, change24h: 3.5, marketCap: 1000000000000, type: 'stock' },
-      { symbol: 'META', name: 'Meta Platforms', price: 580, change24h: 1.7, marketCap: 950000000000, type: 'stock' },
-      { symbol: 'JPM', name: 'JPMorgan Chase', price: 210, change24h: 0.3, marketCap: 600000000000, type: 'stock' },
-      { symbol: 'V', name: 'Visa Inc.', price: 320, change24h: 0.6, marketCap: 550000000000, type: 'stock' },
-      { symbol: 'WMT', name: 'Walmart Inc.', price: 85, change24h: -0.4, marketCap: 450000000000, type: 'stock' }
-    ];
-    
-    setMarketData(fallbackData);
-  };
 
   const applyFilters = () => {
     let filtered = [...marketData];
