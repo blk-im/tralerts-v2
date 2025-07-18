@@ -47,97 +47,64 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   const fetchMarketData = async () => {
     setLoading(true);
     
-    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-    if (!apiKey || apiKey === 'placeholder-key') {
-      console.error('Finnhub API key not configured properly');
-      alert('⚠️ Clé API Finnhub manquante ! Veuillez configurer VITE_FINNHUB_API_KEY dans le fichier .env');
-      return;
-    }
+    console.log('🔄 Fetching real market data from Finnhub...');
     
     try {
-      // Liste des symboles à surveiller
-      const cryptoSymbols = ['BINANCE:BTCUSDT', 'BINANCE:ETHUSDT', 'BINANCE:SOLUSDT', 'BINANCE:ADAUSDT', 'BINANCE:BNBUSDT'];
-      const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'JPM', 'V', 'WMT'];
-      
-      console.log('🔄 Récupération des prix réels depuis Finnhub...');
-      
-      // Récupérer les données pour les cryptos
-      const cryptoData = await Promise.all(
-        cryptoSymbols.map(async (symbol) => {
-          try {
-            console.log(`Fetching crypto: ${symbol}`);
-            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
-            
-            if (response.ok) {
-              const data = await response.json();
-              console.log(`${symbol} response:`, data);
-              if (data.c) {
-                const baseSymbol = symbol.split(':')[1].replace('USDT', '');
-                return {
-                  symbol: baseSymbol,
-                  name: getCryptoName(baseSymbol),
-                  price: data.c,
-                  change24h: data.dp || 0,
-                  volume24h: data.v || 0,
-                  type: 'crypto' as const
-                };
-              }
-            } else {
-              console.error(`Failed to fetch ${symbol}:`, response.status, response.statusText);
-            }
-            return null;
-          } catch (error) {
-            console.error(`Error fetching data for ${symbol}:`, error);
-            return null;
-          }
-        })
-      );
-      
-      // Récupérer les données pour les actions
-      const stockData = await Promise.all(
-        stockSymbols.map(async (symbol) => {
-          try {
-            console.log(`Fetching stock: ${symbol}`);
-            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
-            
-            if (response.ok) {
-              const data = await response.json();
-              console.log(`${symbol} response:`, data);
-              if (data.c) {
-                return {
-                  symbol,
-                  name: getStockName(symbol),
-                  price: data.c,
-                  change24h: data.dp || 0,
-                  marketCap: data.marketCapitalization || 0,
-                  volume24h: data.v || 0,
-                  type: 'stock' as const
-                };
-              }
-            } else {
-              console.error(`Failed to fetch ${symbol}:`, response.status, response.statusText);
-            }
-            return null;
-          } catch (error) {
-            console.error(`Error fetching data for ${symbol}:`, error);
-            return null;
-          }
-        })
-      );
-      
-      // Combiner et filtrer les résultats
-      const combinedData = [...cryptoData, ...stockData].filter(Boolean) as MarketItem[];
-      
-      if (combinedData.length > 0) {
-        console.log('✅ Données réelles récupérées:', combinedData.length, 'actifs');
-        setMarketData(combinedData);
-      } else {
-        console.error('❌ Aucune donnée reçue de Finnhub - Vérifiez votre clé API');
-        alert('❌ Impossible de récupérer les données de Finnhub. Vérifiez votre clé API dans le fichier .env');
+      // Test de connexion d'abord
+      const isConnected = await finnhubService.testConnection();
+      if (!isConnected) {
+        throw new Error('Finnhub API connection failed');
       }
+      
+      // Liste des symboles à surveiller
+      const symbolsToFetch = [
+        { symbol: 'BTC', marketType: 'crypto' as const },
+        { symbol: 'ETH', marketType: 'crypto' as const },
+        { symbol: 'SOL', marketType: 'crypto' as const },
+        { symbol: 'ADA', marketType: 'crypto' as const },
+        { symbol: 'BNB', marketType: 'crypto' as const },
+        { symbol: 'AAPL', marketType: 'stock' as const },
+        { symbol: 'MSFT', marketType: 'stock' as const },
+        { symbol: 'GOOGL', marketType: 'stock' as const },
+        { symbol: 'AMZN', marketType: 'stock' as const },
+        { symbol: 'TSLA', marketType: 'stock' as const }
+      ];
+      
+      console.log(`📊 Fetching data for ${symbolsToFetch.length} symbols...`);
+      
+      // Utiliser le service Finnhub pour récupérer les prix
+      const quotes = await finnhubService.getMultipleQuotes(symbolsToFetch);
+      
+      // Transformer les données en format MarketItem
+      const marketData: MarketItem[] = [];
+      
+      for (const { symbol, marketType } of symbolsToFetch) {
+        const quote = quotes[symbol.toUpperCase()];
+        if (quote && quote.c) {
+          marketData.push({
+            symbol: symbol.toUpperCase(),
+            name: marketType === 'crypto' ? getCryptoName(symbol) : getStockName(symbol),
+            price: quote.c,
+            change24h: quote.dp || 0,
+            marketCap: quote.marketCapitalization || 0,
+            volume24h: quote.v || 0,
+            type: marketType
+          });
+        }
+      }
+      
+      if (marketData.length > 0) {
+        console.log(`✅ Successfully loaded ${marketData.length} real market prices`);
+        setMarketData(marketData);
+      } else {
+        throw new Error('No market data received');
+      }
+      
     } catch (error) {
       console.error('Error fetching market data:', error);
-      alert('❌ Erreur lors de la récupération des données: ' + error.message);
+      
+      // Afficher une alerte utilisateur claire
+      alert(`❌ Erreur de récupération des données Finnhub: ${error.message}\n\nVérifiez votre connexion internet et réessayez.`);
     } finally {
       setLoading(false);
     }

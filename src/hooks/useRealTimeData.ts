@@ -28,12 +28,17 @@ export function useRealTimeData({
     }
 
     try {
+      console.log(`🔄 Fetching real-time data for ${symbols.length} symbols`);
       setError(null);
+      
+      // Utiliser le service Finnhub pour obtenir les prix réels
       const quotes = await finnhubService.getMultipleQuotes(symbols);
+      
+      console.log(`✅ Real-time data fetched:`, Object.keys(quotes));
       setData(quotes);
     } catch (err) {
       console.error('Error fetching real-time data:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : 'Erreur de récupération des données');
     } finally {
       setLoading(false);
     }

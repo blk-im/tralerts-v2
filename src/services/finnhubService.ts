@@ -1,9 +1,10 @@
 /**
- * Service pour l'API Finnhub - Données financières en temps réel
+ * Service Finnhub complètement refait - Version fonctionnelle
+ * API Key: d1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg
  */
 
+const FINNHUB_API_KEY = 'd1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
-const API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
 
 export interface Quote {
   c: number; // Current price
@@ -26,54 +27,41 @@ export interface CandleData {
   v: number[]; // Volumes
 }
 
-export interface CompanyProfile {
-  country: string;
-  currency: string;
-  exchange: string;
-  ipo: string;
-  marketCapitalization: number;
-  name: string;
-  phone: string;
-  shareOutstanding: number;
-  ticker: string;
-  weburl: string;
-  logo: string;
-  finnhubIndustry: string;
-}
-
 class FinnhubService {
+  private apiKey = FINNHUB_API_KEY;
   private baseURL = FINNHUB_BASE_URL;
-  private apiKey = API_KEY;
 
-  constructor() {
-    if (!this.apiKey || this.apiKey === 'placeholder-key') {
-      console.warn('Finnhub API key not configured');
-    }
-  }
-
+  /**
+   * Faire une requête à l'API Finnhub
+   */
   private async makeRequest<T>(endpoint: string): Promise<T> {
-    if (!this.apiKey || this.apiKey === 'placeholder-key') {
-      throw new Error('Finnhub API key not configured');
-    }
-
     const url = `${this.baseURL}${endpoint}&token=${this.apiKey}`;
     
+    console.log(`🔄 Finnhub Request: ${url}`);
+    
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log(`📡 Response Status: ${response.status}`);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`❌ HTTP Error ${response.status}:`, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
       
       const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      console.log(`✅ Data received:`, data);
       
       return data;
     } catch (error) {
-      console.error(`Finnhub API error for ${endpoint}:`, error);
+      console.error(`❌ Finnhub API Error for ${endpoint}:`, error);
       throw error;
     }
   }
@@ -82,11 +70,27 @@ class FinnhubService {
    * Obtenir le prix actuel d'un actif
    */
   async getQuote(symbol: string, marketType: 'crypto' | 'stock' = 'stock'): Promise<Quote> {
-    const formattedSymbol = marketType === 'crypto' 
-      ? `BINANCE:${symbol.toUpperCase()}USDT`
-      : symbol.toUpperCase();
+    let formattedSymbol: string;
     
-    return this.makeRequest<Quote>(`/quote?symbol=${formattedSymbol}`);
+    if (marketType === 'crypto') {
+      // Format crypto pour Finnhub: BINANCE:BTCUSDT
+      formattedSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
+    } else {
+      // Format stock pour Finnhub: AAPL
+      formattedSymbol = symbol.toUpperCase();
+    }
+    
+    console.log(`💰 Getting quote for ${formattedSymbol} (${marketType})`);
+    
+    const endpoint = `/quote?symbol=${encodeURIComponent(formattedSymbol)}`;
+    const data = await this.makeRequest<Quote>(endpoint);
+    
+    if (!data.c || data.c === 0) {
+      throw new Error(`No price data for ${formattedSymbol}`);
+    }
+    
+    console.log(`💵 Current price for ${symbol}: $${data.c}`);
+    return data;
   }
 
   /**
@@ -98,60 +102,115 @@ class FinnhubService {
     count: number = 30,
     marketType: 'crypto' | 'stock' = 'stock'
   ): Promise<CandleData> {
-    const formattedSymbol = marketType === 'crypto' 
-      ? `BINANCE:${symbol.toUpperCase()}USDT`
-      : symbol.toUpperCase();
+    let formattedSymbol: string;
+    let endpoint: string;
     
-    const endpoint = marketType === 'crypto' 
-      ? `/crypto/candle?symbol=${formattedSymbol}&resolution=${resolution}&count=${count}`
-      : `/stock/candle?symbol=${formattedSymbol}&resolution=${resolution}&count=${count}`;
+    if (marketType === 'crypto') {
+      formattedSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
+      endpoint = `/crypto/candle?symbol=${encodeURIComponent(formattedSymbol)}&resolution=${resolution}&count=${count}`;
+    } else {
+      formattedSymbol = symbol.toUpperCase();
+      endpoint = `/stock/candle?symbol=${encodeURIComponent(formattedSymbol)}&resolution=${resolution}&count=${count}`;
+    }
     
-    return this.makeRequest<CandleData>(endpoint);
-  }
-
-  /**
-   * Obtenir le profil d'une entreprise
-   */
-  async getCompanyProfile(symbol: string): Promise<CompanyProfile> {
-    return this.makeRequest<CompanyProfile>(`/stock/profile2?symbol=${symbol.toUpperCase()}`);
+    console.log(`📊 Getting candles for ${formattedSymbol}`);
+    
+    const data = await this.makeRequest<CandleData>(endpoint);
+    
+    if (data.s !== 'ok' || !data.c || data.c.length === 0) {
+      throw new Error(`No candle data for ${formattedSymbol}`);
+    }
+    
+    console.log(`📈 Candle data for ${symbol}: ${data.c.length} points`);
+    return data;
   }
 
   /**
    * Obtenir plusieurs prix en une seule fois
    */
   async getMultipleQuotes(symbols: Array<{symbol: string, marketType: 'crypto' | 'stock'}>): Promise<Record<string, Quote>> {
-    const promises = symbols.map(async ({symbol, marketType}) => {
+    console.log(`🔄 Getting multiple quotes for ${symbols.length} symbols`);
+    
+    const results: Record<string, Quote> = {};
+    
+    // Traiter les symboles un par un pour éviter les limites de rate
+    for (const {symbol, marketType} of symbols) {
       try {
         const quote = await this.getQuote(symbol, marketType);
-        return { symbol: symbol.toUpperCase(), quote };
+        results[symbol.toUpperCase()] = quote;
+        
+        // Petit délai pour éviter le rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
-        console.error(`Error fetching quote for ${symbol}:`, error);
-        return { symbol: symbol.toUpperCase(), quote: null };
+        console.error(`❌ Failed to get quote for ${symbol}:`, error);
+        // Continue avec les autres symboles
       }
-    });
-
-    const results = await Promise.all(promises);
+    }
     
-    return results.reduce((acc, {symbol, quote}) => {
-      if (quote) {
-        acc[symbol] = quote;
-      }
-      return acc;
-    }, {} as Record<string, Quote>);
+    console.log(`✅ Successfully fetched ${Object.keys(results).length}/${symbols.length} quotes`);
+    return results;
   }
 
   /**
    * Rechercher des symboles
    */
   async searchSymbols(query: string): Promise<any> {
-    return this.makeRequest(`/search?q=${encodeURIComponent(query)}`);
+    console.log(`🔍 Searching symbols for: ${query}`);
+    
+    const endpoint = `/search?q=${encodeURIComponent(query)}`;
+    const data = await this.makeRequest(endpoint);
+    
+    return data.result || [];
   }
 
   /**
    * Obtenir les actualités du marché
    */
   async getMarketNews(category: string = 'general'): Promise<any[]> {
-    return this.makeRequest(`/news?category=${category}`);
+    console.log(`📰 Getting market news for category: ${category}`);
+    
+    const endpoint = `/news?category=${category}`;
+    const data = await this.makeRequest<any[]>(endpoint);
+    
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Vérifier si l'API est configurée et fonctionnelle
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      console.log('🧪 Testing Finnhub connection...');
+      
+      // Test avec Apple (action)
+      const appleQuote = await this.getQuote('AAPL', 'stock');
+      
+      if (appleQuote && appleQuote.c && appleQuote.c > 0) {
+        console.log('✅ Finnhub connection successful!');
+        return true;
+      } else {
+        console.error('❌ Invalid response from Finnhub');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Finnhub connection failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Obtenir les prix populaires pour le dashboard
+   */
+  async getPopularPrices(): Promise<Record<string, Quote>> {
+    const popularAssets = [
+      { symbol: 'BTC', marketType: 'crypto' as const },
+      { symbol: 'ETH', marketType: 'crypto' as const },
+      { symbol: 'AAPL', marketType: 'stock' as const },
+      { symbol: 'GOOGL', marketType: 'stock' as const },
+      { symbol: 'TSLA', marketType: 'stock' as const }
+    ];
+    
+    return this.getMultipleQuotes(popularAssets);
   }
 
   /**
@@ -162,16 +221,42 @@ class FinnhubService {
   }
 }
 
+// Instance singleton
 export const finnhubService = new FinnhubService();
+
+// Export par défaut
 export default finnhubService;
 
-// Fonction utilitaire pour vérifier si l'API est configurée
-export const checkFinnhubConnection = async (): Promise<boolean> => {
+// Fonction utilitaire pour tester la connexion
+export const testFinnhubConnection = async (): Promise<boolean> => {
+  return finnhubService.testConnection();
+};
+
+// Fonction pour obtenir un prix simple
+export const getPrice = async (symbol: string, marketType: 'crypto' | 'stock'): Promise<number> => {
   try {
-    const quote = await finnhubService.getQuote('AAPL', 'stock');
-    return quote && typeof quote.c === 'number' && quote.c > 0;
+    const quote = await finnhubService.getQuote(symbol, marketType);
+    return quote.c;
   } catch (error) {
-    console.error('Finnhub connection test failed:', error);
-    return false;
+    console.error(`Error getting price for ${symbol}:`, error);
+    throw error;
+  }
+};
+
+// Fonction pour obtenir plusieurs prix
+export const getPrices = async (symbols: string[], marketType: 'crypto' | 'stock'): Promise<Record<string, number>> => {
+  try {
+    const symbolsWithType = symbols.map(symbol => ({ symbol, marketType }));
+    const quotes = await finnhubService.getMultipleQuotes(symbolsWithType);
+    
+    const prices: Record<string, number> = {};
+    for (const [symbol, quote] of Object.entries(quotes)) {
+      prices[symbol] = quote.c;
+    }
+    
+    return prices;
+  } catch (error) {
+    console.error('Error getting multiple prices:', error);
+    throw error;
   }
 };

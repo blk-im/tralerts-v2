@@ -142,122 +142,42 @@ export function PriceChart({ symbol, marketType }: PriceChartProps) {
     try {
       setLoading(true);
       
-      const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-      if (!apiKey || apiKey === 'placeholder-key') {
-        console.error('Finnhub API key not configured');
-        alert('⚠️ Clé API Finnhub manquante ! Configurez VITE_FINNHUB_API_KEY dans .env');
-        return;
-      }
+      console.log(`🔄 Fetching price data for ${symbol} (${marketType})`);
       
-      if (marketType === 'crypto') {
-        // Format du symbole pour Finnhub crypto
-        const cryptoSymbol = `BINANCE:${symbol.toUpperCase()}USDT`;
-        console.log(`🔄 Récupération prix crypto: ${cryptoSymbol}`);
+      // Utiliser le service Finnhub pour obtenir le prix actuel
+      const quote = await finnhubService.getQuote(symbol, marketType);
+      
+      if (quote && quote.c) {
+        const currentPrice = quote.c;
+        const change = quote.dp || 0;
         
-        const response = await fetch(
-          `https://finnhub.io/api/v1/crypto/candle?symbol=${cryptoSymbol}&resolution=5&count=24&token=${apiKey}`
-        );
+        console.log(`💰 Real price for ${symbol}: $${currentPrice}`);
+        setCurrentPrice(currentPrice);
+        setPriceChange(change);
         
-        if (response.ok) {
-          const candleData = await response.json();
-          console.log(`✅ Données crypto reçues pour ${cryptoSymbol}:`, candleData);
+        // Obtenir les données historiques
+        const candleData = await finnhubService.getCandles(symbol, '5', 24, marketType);
+        
+        if (candleData && candleData.c && candleData.c.length > 0) {
+          const historicalData = candleData.c.map((price: number, index: number) => {
+            const timestamp = candleData.t[index] * 1000;
+            const time = new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            return {
+              time,
+              price: Number(price.toFixed(marketType === 'crypto' ? 2 : 2))
+            };
+          });
           
-          if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
-            const prices = candleData.c;
-            const currentPrice = prices[prices.length - 1];
-            const firstPrice = prices[0];
-            const change = ((currentPrice - firstPrice) / firstPrice) * 100;
-            
-            console.log(`💰 Prix actuel ${symbol}: $${currentPrice}`);
-            setCurrentPrice(currentPrice);
-            setPriceChange(change);
-            
-            // Créer des données historiques à partir des chandeliers
-            const historicalData = prices.map((price: number, index: number) => {
-              const timestamp = candleData.t[index] * 1000;
-              const time = new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-              return {
-                time,
-                price: Number(price.toFixed(2))
-              };
-            });
-            
-            setData(historicalData);
-          } else {
-            console.error('❌ Format de données invalide pour', cryptoSymbol, ':', candleData);
-            alert(`❌ Données invalides pour ${symbol}. Vérifiez que le symbole existe sur Finnhub.`);
-          }
-        } else {
-          const errorText = await response.text();
-          console.error('❌ Erreur API crypto:', errorText);
-          alert(`❌ Erreur API pour ${symbol}: ${response.status}`);
+          setData(historicalData);
+          console.log(`📊 Historical data loaded: ${historicalData.length} points`);
         }
       } else {
-        // Format du symbole pour Finnhub stocks
-        const stockSymbol = symbol.toUpperCase();
-        console.log(`🔄 Récupération prix action: ${stockSymbol}`);
-        
-        // Récupérer le prix actuel
-        const quoteResponse = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${stockSymbol}&token=${apiKey}`
-        );
-        
-        if (quoteResponse.ok) {
-          const quoteData = await quoteResponse.json();
-          console.log(`✅ Données action reçues pour ${stockSymbol}:`, quoteData);
-          
-          if (quoteData.c) {
-            const currentPrice = quoteData.c;
-            const change = quoteData.dp || 0; // Changement en pourcentage
-            
-            console.log(`💰 Prix actuel ${symbol}: $${currentPrice}`);
-            setCurrentPrice(currentPrice);
-            setPriceChange(change);
-            
-            // Récupérer les données historiques
-            const candleResponse = await fetch(
-              `https://finnhub.io/api/v1/stock/candle?symbol=${stockSymbol}&resolution=5&count=24&token=${apiKey}`
-            );
-            
-            if (candleResponse.ok) {
-              const candleData = await candleResponse.json();
-              
-              if (candleData.s === 'ok' && candleData.c && candleData.c.length > 0) {
-                const prices = candleData.c;
-                
-                // Créer des données historiques à partir des chandeliers
-                const historicalData = prices.map((price: number, index: number) => {
-                  const timestamp = candleData.t[index] * 1000;
-                  const time = new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                  return {
-                    time,
-                    price: Number(price.toFixed(2))
-                  };
-                });
-                
-                setData(historicalData);
-              } else {
-                console.error('❌ Format de données chandelier invalide:', candleData);
-                alert(`❌ Données historiques invalides pour ${symbol}`);
-              }
-            } else {
-              const errorText = await candleResponse.text();
-              console.error('❌ Erreur données historiques:', errorText);
-              alert(`❌ Erreur données historiques pour ${symbol}`);
-            }
-          } else {
-            console.error('❌ Format de prix invalide:', quoteData);
-            alert(`❌ Prix invalide pour ${symbol}. Vérifiez que le symbole existe.`);
-          }
-        } else {
-          const errorText = await quoteResponse.text();
-          console.error('❌ Erreur prix action:', errorText);
-          alert(`❌ Erreur prix pour ${symbol}: ${quoteResponse.status}`);
-        }
+        throw new Error(`No price data available for ${symbol}`);
       }
+      
     } catch (error) {
       console.error('Error fetching price data:', error);
-      alert(`❌ Erreur réseau: ${error.message}`);
+      alert(`❌ Erreur lors de la récupération du prix pour ${symbol}: ${error.message}`);
     } finally {
       setLoading(false);
     }
