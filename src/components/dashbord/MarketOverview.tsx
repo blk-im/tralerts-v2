@@ -1,4 +1,5 @@
 import { finnhubService } from '../../../services/FinnhubService';
+console.log('finnhubService:', finnhubService);
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
