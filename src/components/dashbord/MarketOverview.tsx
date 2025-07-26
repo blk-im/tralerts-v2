@@ -5,6 +5,8 @@ import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown 
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+const FINNHUB_API_KEY = 'd1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg';
+
 
 interface MarketItem {
   symbol: string;
