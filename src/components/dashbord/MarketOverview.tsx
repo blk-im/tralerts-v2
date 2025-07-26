@@ -1,4 +1,4 @@
-import { finnhubService } from '../../../services/FinnhubService';
+import { finnhubService } from "../../services/FinnhubService";
 
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
