@@ -423,9 +423,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
+
 
 
       {/* Market Stats */}
