@@ -4,6 +4,93 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 const FINNHUB_API_KEY = 'd1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+
+const FINNHUB_API_KEY = 'd1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg';
+
+// ------ Ici, place ta fonction fetchMarketData ------
+async function fetchMarketData(setMarketData, setLoading) {
+  setLoading(true);
+
+  const symbolsToFetch = [
+    { symbol: 'BTC', marketType: 'crypto' },
+    { symbol: 'ETH', marketType: 'crypto' },
+    { symbol: 'AAPL', marketType: 'stock' },
+    { symbol: 'MSFT', marketType: 'stock' },
+  ];
+
+  const marketData = [];
+
+  for (const { symbol, marketType } of symbolsToFetch) {
+    let apiSymbol = symbol.toUpperCase();
+    if (marketType === 'crypto') {
+      apiSymbol = `BINANCE:${apiSymbol}USDT`;
+    }
+
+    try {
+      const response = await fetch(
+        `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(apiSymbol)}&token=${FINNHUB_API_KEY}`
+      );
+
+      if (!response.ok) {
+        console.error(`Erreur API pour ${apiSymbol}:`, response.statusText);
+        continue;
+      }
+
+      const quote = await response.json();
+
+      marketData.push({
+        symbol: symbol.toUpperCase(),
+        price: quote.c,
+        changePercent: quote.dp,
+        marketType,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100)); // délai pour éviter rate limit
+    } catch (error) {
+      console.error(`Erreur fetch pour ${apiSymbol}:`, error);
+    }
+  }
+
+  setMarketData(marketData);
+  setLoading(false);
+}
+
+// ------ Puis ton composant React -------
+export default function MarketOverview() {
+  const [marketData, setMarketData] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchMarketData(setMarketData, setLoading);
+  }, []);
+
+  if (loading) return <p>Chargement des données...</p>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <h2>Market Overview</h2>
+        <Button onClick={() => fetchMarketData(setMarketData, setLoading)}>
+          <RefreshCw /> Actualiser
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <ul>
+          {marketData.map(({ symbol, price, changePercent }) => (
+            <li key={symbol}>
+              <strong>{symbol}</strong> : ${price} ({changePercent}%)
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
 
 
 interface MarketItem {
