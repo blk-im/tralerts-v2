@@ -7,23 +7,23 @@ const FINNHUB_API_KEY = 'd1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 export interface Quote {
-  c: number; // Current price
-  d: number; // Change
-  dp: number; // Percent change
-  h: number; // High price of the day
-  l: number; // Low price of the day
-  o: number; // Open price of the day
-  pc: number; // Previous close price
-  t: number; // Timestamp
+  c: number; // Prix actuel
+  d: number; // Variation
+  dp: number; // Pourcentage de variation
+  h: number; // Prix le plus haut de la journée
+  l: number; // Prix le plus bas de la journée
+  o: number; // Prix d'ouverture
+  pc: number; // Clôture précédente
+  t: number; // Horodatage (timestamp)
 }
 
 export interface CandleData {
-  c: number[]; // Close prices
-  h: number[]; // High prices
-  l: number[]; // Low prices
-  o: number[]; // Open prices
-  s: string; // Status
-  t: number[]; // Timestamps
+  c: number[]; // Prix de clôture
+  h: number[]; // Prix les plus hauts
+  l: number[]; // Prix les plus bas
+  o: number[]; // Prix d'ouverture
+  s: string;   // Statut
+  t: number[]; // Horodatages
   v: number[]; // Volumes
 }
 
@@ -32,7 +32,7 @@ class FinnhubService {
   private baseURL = FINNHUB_BASE_URL;
 
   /**
-   * Faire une requête à l'API Finnhub
+   * Effectue une requête à l'API Finnhub
    */
   private async makeRequest<T>(endpoint: string): Promise<T> {
     const url = `${this.baseURL}${endpoint}&token=${this.apiKey}`;
@@ -85,11 +85,26 @@ class FinnhubService {
     const endpoint = `/quote?symbol=${encodeURIComponent(formattedSymbol)}`;
     const data = await this.makeRequest<Quote>(endpoint);
     
-    if (!data.c || data.c === 0) {
-      throw new Error(`No price data for ${formattedSymbol}`);
+    // Affichage de la data pour vérification
+    console.log('📦 Données de quote reçues: ', data);
+    
+    // Vérifie si le prix actuel (c) est valide
+    if (!data || data.c === 0) {
+      console.warn(`⚠️ Aucune donnée de prix pour ${formattedSymbol}. Retour des valeurs par défaut.`);
+      // Retourne un objet par défaut pour éviter l'erreur dans l'affichage
+      return {
+        c: 0,
+        d: 0,
+        dp: 0,
+        h: 0,
+        l: 0,
+        o: 0,
+        pc: 0,
+        t: 0,
+      };
     }
     
-    console.log(`💵 Current price for ${symbol}: $${data.c}`);
+    console.log(`💵 Current price for ${formattedSymbol}: $${data.c}`);
     return data;
   }
 
@@ -121,7 +136,7 @@ class FinnhubService {
       throw new Error(`No candle data for ${formattedSymbol}`);
     }
     
-    console.log(`📈 Candle data for ${symbol}: ${data.c.length} points`);
+    console.log(`📈 Candle data for ${formattedSymbol}: ${data.c.length} points`);
     return data;
   }
 
