@@ -3,14 +3,18 @@ import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown 
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import toast from 'react-hot-toast'; // Assurez-vous d'avoir toast installé et configuré
 
-const FINNHUB_API_KEY = 'd1s3vs1r01qskg7rdfl0d1s3vs1r01qskg7rdflg';
+// Votre clé API Twelve Data
+const TWELVE_DATA_API_KEY = 'ced07f32e4d0415dab6cc96aa79d4ccc';
+// URL de base de l'API Twelve Data pour les quotes
+const TWELVE_DATA_BASE_URL = 'https://api.twelvedata.com';
 
 interface MarketItem {
   symbol: string;
   name: string;
   price: number;
-  change24h: number;
+  change24h: number; // Pourcentage de changement
   marketCap?: number;
   volume24h?: number;
   type: 'crypto' | 'stock';
@@ -27,9 +31,9 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'all' | 'crypto' | 'stock'>('all');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'gainers' | 'losers'>('all');
-  const [isFreePlan] = useState(true);
+  const [isFreePlan] = useState(true); // Conservez ceci pour la logique d'affichage du plan gratuit
 
-  // Noms pour cryptos et actions
+  // Noms pour cryptos et actions (ces listes sont toujours utiles pour l'affichage)
   const getCryptoName = (symbol: string): string => {
     const names: { [key: string]: string } = {
       BTC: 'Bitcoin',
@@ -72,59 +76,101 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     }).format(value);
 
   const formatLargeNumber = (value: number) => {
+    if (value === undefined || value === null) return 'N/A';
     if (value >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)}T`;
     if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
     return value.toLocaleString();
   };
 
-  // Fonction de fetch
+  // Fonction de fetch des données de marché
   const fetchMarketData = useCallback(async () => {
     setLoading(true);
     try {
       const symbolsToFetch = [
-        { symbol: 'BTC', marketType: 'crypto' as const },
-        { symbol: 'ETH', marketType: 'crypto' as const },
-        { symbol: 'SOL', marketType: 'crypto' as const },
-        { symbol: 'ADA', marketType: 'crypto' as const },
-        { symbol: 'BNB', marketType: 'crypto' as const },
-        { symbol: 'AAPL', marketType: 'stock' as const },
-        { symbol: 'MSFT', marketType: 'stock' as const },
-        { symbol: 'GOOGL', marketType: 'stock' as const },
-        { symbol: 'AMZN', marketType: 'stock' as const },
-        { symbol: 'TSLA', marketType: 'stock' as const },
+        { symbol: 'BTC/USD', marketType: 'crypto' as const, originalSymbol: 'BTC' },
+        { symbol: 'ETH/USD', marketType: 'crypto' as const, originalSymbol: 'ETH' },
+        { symbol: 'SOL/USD', marketType: 'crypto' as const, originalSymbol: 'SOL' },
+        { symbol: 'ADA/USD', marketType: 'crypto' as const, originalSymbol: 'ADA' },
+        { symbol: 'BNB/USD', marketType: 'crypto' as const, originalSymbol: 'BNB' },
+        { symbol: 'AAPL', marketType: 'stock' as const, originalSymbol: 'AAPL' },
+        { symbol: 'MSFT', marketType: 'stock' as const, originalSymbol: 'MSFT' },
+        { symbol: 'GOOGL', marketType: 'stock' as const, originalSymbol: 'GOOGL' },
+        { symbol: 'AMZN', marketType: 'stock' as const, originalSymbol: 'AMZN' },
+        { symbol: 'TSLA', marketType: 'stock' as const, originalSymbol: 'TSLA' },
       ];
 
-      // Appels API Finnhub en parallèle
-      const promises = symbolsToFetch.map(async ({ symbol, marketType }) => {
-        const apiSymbol = marketType === 'crypto' ? `BINANCE:${symbol}USDT` : symbol;
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(apiSymbol)}&token=${FINNHUB_API_KEY}`
-        );
-        if (!response.ok) throw new Error(`Erreur API pour ${apiSymbol}: ${response.statusText}`);
-        const quote = await response.json();
-        return {
-          symbol,
-          name: marketType === 'crypto' ? getCryptoName(symbol) : getStockName(symbol),
-          price: quote.c,
-          change24h: quote.dp ?? 0,
-          marketCap: quote.marketCapitalization,
-          volume24h: quote.v,
-          type: marketType,
-        } as MarketItem;
+      // Twelve Data utilise des endpoints différents pour les quotes (prix actuels)
+      // et les time_series (pour le changement sur 24h, qui nécessite des données historiques)
+      // Pour simplifier, nous allons utiliser l'endpoint 'quote' qui donne le prix et le changement.
+      // Note: Le plan gratuit de Twelve Data peut ne pas fournir toutes les données (marketCap, volume)
+      // ou peut avoir un délai sur certaines données.
+
+      const promises = symbolsToFetch.map(async ({ symbol, marketType, originalSymbol }) => {
+        try {
+          const response = await fetch(
+            `${TWELVE_DATA_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&apikey=${TWELVE_DATA_API_KEY}`
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Twelve Data API Error for ${symbol}: Status ${response.status} - ${response.statusText}. Response Body: ${errorText}`);
+            throw new Error(`Erreur API pour ${originalSymbol} (Code: ${response.status})`);
+          }
+
+          const data = await response.json();
+
+          // Vérifier si les données sont valides et contiennent les champs nécessaires
+          // Twelve Data renvoie 'close' pour le prix actuel, 'percent_change' pour le changement sur 24h
+          if (!data || data.status === 'error' || !data.close || data.percent_change === undefined) {
+            console.warn(`Twelve Data: Données vides ou invalides reçues pour ${originalSymbol}. Réponse:`, data);
+            throw new Error(`Données manquantes ou invalides pour ${originalSymbol}`);
+          }
+
+          // Twelve Data renvoie le volume et la capitalisation boursière dans l'objet quote pour certains plans/endpoints.
+          // Pour le plan gratuit, ces champs peuvent être absents ou nécessiter un endpoint différent.
+          // Nous les rendons optionnels dans l'interface MarketItem.
+          const marketCap = parseFloat(data.market_cap) || undefined; // Twelve Data peut fournir market_cap
+          const volume24h = parseFloat(data.volume) || undefined; // Twelve Data peut fournir volume
+
+          return {
+            symbol: originalSymbol, // Utilisez le symbole original pour l'affichage
+            name: marketType === 'crypto' ? getCryptoName(originalSymbol) : getStockName(originalSymbol),
+            price: parseFloat(data.close),
+            change24h: parseFloat(data.percent_change) ?? 0, // Utilisez percent_change
+            marketCap: marketCap,
+            volume24h: volume24h,
+            type: marketType,
+          } as MarketItem;
+        } catch (innerError: any) {
+          console.error(`Failed to fetch data for ${originalSymbol}:`, innerError);
+          // Ne pas propager l'erreur pour permettre aux autres promesses de s'exécuter
+          // Retourner null ou un objet d'erreur pour le filtrage ultérieur
+          return null;
+        }
       });
 
       const results = await Promise.allSettled(promises);
 
       const marketData: MarketItem[] = results
-        .filter((res) => res.status === 'fulfilled')
-        .map((res: PromiseFulfilledResult<MarketItem>) => res.value);
+        .filter((res) => res.status === 'fulfilled' && res.value !== null)
+        .map((res: PromiseFulfilledResult<MarketItem | null>) => res.value as MarketItem); // Cast pour s'assurer du type
 
-      if (marketData.length === 0) throw new Error('Aucune donnée reçue');
+      if (marketData.length === 0) {
+        toast.error('❌ Erreur de récupération des données Twelve Data: Aucune donnée valide reçue.');
+        throw new Error('Aucune donnée valide reçue');
+      }
 
       setMarketData(marketData);
+      toast.success('Données du marché mises à jour avec Twelve Data !');
+
     } catch (error: any) {
-      alert(`❌ Erreur de récupération des données Finnhub: ${error.message}`);
+      console.error('Erreur globale de récupération des données Twelve Data:', error);
+      // Le toast est déjà affiché pour le cas marketData.length === 0
+      // Si c'est une autre erreur, on l'affiche ici
+      if (marketData.length > 0 || error.message !== 'Aucune donnée valide reçue') {
+          toast.error(`❌ Erreur de récupération des données Twelve Data: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -154,11 +200,11 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     setFilteredData(filtered);
   }, [marketData, selectedType, searchTerm, selectedFilter, isFreePlan]);
 
-  // Rafraîchissement toutes les 20 secondes
+  // Rafraîchissement toutes les 20 secondes (comme discuté)
   useEffect(() => {
-    fetchMarketData();
-    const interval = setInterval(() => fetchMarketData(), 20000);
-    return () => clearInterval(interval);
+    fetchMarketData(); // Exécute une fois au montage
+    const interval = setInterval(() => fetchMarketData(), 20000); // Puis toutes les 20 secondes
+    return () => clearInterval(interval); // Nettoyage de l'intervalle au démontage
   }, [fetchMarketData]);
 
   const handleUpgradeClick = () => {
@@ -175,10 +221,11 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <Globe className="w-6 h-6 mr-3 text-blue-600" />
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aperçu du Marché</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Finnhub</p>
+                {/* Mettre à jour le texte pour refléter Twelve Data */}
+                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Twelve Data</p>
               </div>
             </div>
-            <Button onClick={fetchMarketData} variant="ghost" size="sm" className="p-2" loading={loading}>
+            <Button onClick={fetchMarketData} variant="ghost" size="sm" className="p-2" disabled={loading}>
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
@@ -424,8 +471,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         </Card>
       )}
 
-
-
       {/* Market Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
@@ -441,7 +486,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-6 text-center">
             <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -455,7 +500,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-6 text-center">
             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
