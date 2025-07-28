@@ -154,10 +154,10 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     setFilteredData(filtered);
   }, [marketData, selectedType, searchTerm, selectedFilter, isFreePlan]);
 
-  // Rafraîchissement toutes les 5 secondes
+  // Rafraîchissement toutes les 20 secondes
   useEffect(() => {
     fetchMarketData();
-    const interval = setInterval(() => fetchMarketData(), 60000);
+    const interval = setInterval(() => fetchMarketData(), 20000);
     return () => clearInterval(interval);
   }, [fetchMarketData]);
 
@@ -462,7 +462,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <RefreshCw className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <p className="text-2xl font-bold text-blue-600">
-              5s
+              20s
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Fréquence de mise à jour
