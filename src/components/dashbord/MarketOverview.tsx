@@ -157,7 +157,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   // Rafraîchissement toutes les 5 secondes
   useEffect(() => {
     fetchMarketData();
-    const interval = setInterval(() => fetchMarketData(), 300000);
+    const interval = setInterval(() => fetchMarketData(), 60000);
     return () => clearInterval(interval);
   }, [fetchMarketData]);
 
