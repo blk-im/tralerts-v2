@@ -5,16 +5,13 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import toast from 'react-hot-toast'; // Assurez-vous d'avoir toast installé et configuré
 
-// Vos clés API
+// Votre clé API Alpha Vantage pour les actions
 const ALPHA_VANTAGE_API_KEY = 'AI72KH8ESTBNYNNZ';
-const ALPACA_API_KEY = 'PKA6CIB622DQWL15SVRS'; // Note: Alpaca API key est souvent un "API Key ID" et un "Secret Key".
-                                              // Pour les requêtes côté client, l'API Key ID est généralement suffisante
-                                              // si l'endpoint ne nécessite pas d'authentification complète.
-                                              // Si vous rencontrez des problèmes, vérifiez la documentation Alpaca pour l'authentification côté client.
+// CoinGecko ne nécessite pas de clé API pour les endpoints de base comme /simple/price
+const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 
 // URLs de base des APIs
 const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
-const ALPACA_DATA_BASE_URL = 'https://data.alpaca.markets/v2'; // Utilisez v2 pour les données de marché
 
 // Durée du cache en millisecondes (ex: 5 minutes)
 const CACHE_DURATION_MS = 5 * 60 * 1000;
@@ -47,16 +44,16 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   // Noms pour cryptos et actions (ces listes sont toujours utiles pour l'affichage)
   const getCryptoName = (symbol: string): string => {
     const names: { [key: string]: string } = {
-      BTCUSD: 'Bitcoin', // Symboles Alpaca
-      ETHUSD: 'Ethereum',
-      SOLUSD: 'Solana',
-      ADAUSD: 'Cardano',
-      BNBUSD: 'Binance Coin',
-      XRPUSD: 'Ripple',
-      DOTUSD: 'Polkadot',
-      DOGEUSD: 'Dogecoin',
-      AVAXUSD: 'Avalanche',
-      MATICUSD: 'Polygon',
+      bitcoin: 'Bitcoin',
+      ethereum: 'Ethereum',
+      solana: 'Solana',
+      cardano: 'Cardano',
+      'binancecoin': 'Binance Coin', // Note: Binance Coin est 'binancecoin' sur CoinGecko
+      ripple: 'Ripple',
+      polkadot: 'Polkadot',
+      dogecoin: 'Dogecoin',
+      avalanche: 'Avalanche',
+      polygon: 'Polygon',
     };
     return names[symbol] || symbol;
   };
@@ -100,162 +97,143 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     let fetchedItems: MarketItem[] = [];
     const now = Date.now();
 
-    const symbolsToProcess = [
-      // Actions (Alpha Vantage)
-      { symbol: 'AAPL', type: 'stock' as const },
-      { symbol: 'MSFT', type: 'stock' as const },
-      { symbol: 'GOOGL', type: 'stock' as const },
-      { symbol: 'AMZN', type: 'stock' as const },
-      { symbol: 'TSLA', type: 'stock' as const },
-      // Cryptos (Alpaca)
-      { symbol: 'BTCUSD', type: 'crypto' as const },
-      { symbol: 'ETHUSD', type: 'crypto' as const },
-      { symbol: 'SOLUSD', type: 'crypto' as const },
-      { symbol: 'ADAUSD', type: 'crypto' as const },
-      { symbol: 'BNBUSD', type: 'crypto' as const },
-    ];
+    const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA'];
+    // Utilisez les IDs de CoinGecko pour les cryptos
+    const cryptoSymbols = ['bitcoin', 'ethereum', 'solana', 'cardano', 'binancecoin'];
 
-    const fetchPromises = symbolsToProcess.map(async ({ symbol, type }) => {
+    // --- Fetch Actions (Alpha Vantage) ---
+    const stockPromises = stockSymbols.map(async (symbol) => {
       const cached = dataCache.get(symbol);
       if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
-        console.log(`Using cached data for ${symbol}`);
+        console.log(`Using cached data for stock ${symbol}`);
         return cached.data;
       }
 
       try {
-        let item: MarketItem | null = null;
-
-        if (type === 'stock') {
-          // Alpha Vantage pour les actions
-          // ATTENTION: Le plan gratuit d'Alpha Vantage est limité à 5 requêtes/minute.
-          // Si vous avez 5 actions, chaque rafraîchissement va consommer 5 requêtes.
-          const response = await fetch(
-            `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`
-          );
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Alpha Vantage API Error for ${symbol}: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
-            throw new Error(`Erreur API Alpha Vantage pour ${symbol} (Code: ${response.status})`);
-          }
-          const data = await response.json();
-
-          if (data['Global Quote'] && data['Global Quote']['05. price']) {
-            const price = parseFloat(data['Global Quote']['05. price']);
-            const changePercent = parseFloat(data['Global Quote']['10. change percent'].replace('%', '')) || 0;
-            const volume = parseFloat(data['Global Quote']['06. volume']) || undefined;
-            // Alpha Vantage ne fournit pas directement la capitalisation boursière sur cet endpoint simple
-            // marketCap sera undefined
-            item = {
-              symbol: symbol,
-              name: getStockName(symbol),
-              price: price,
-              change24h: changePercent,
-              volume24h: volume,
-              type: 'stock',
-            };
-          } else {
-            console.warn(`Alpha Vantage: Données manquantes ou invalides pour ${symbol}. Réponse:`, data);
-            throw new Error(`Données manquantes ou invalides pour ${symbol} (Alpha Vantage)`);
-          }
-        } else {
-          // Alpaca pour les cryptos
-          // ATTENTION: Obtenir le changement sur 24h avec Alpaca nécessite de multiples requêtes
-          // ou un plan supérieur. Le code ci-dessous fera 2 requêtes par crypto pour le 24h change.
-          // Cela va consommer vos limites très rapidement sur un plan gratuit.
-          const quoteResponse = await fetch(
-            `${ALPACA_DATA_BASE_URL}/crypto/quotes/latest?symbols=${encodeURIComponent(symbol)}`, {
-                headers: {
-                    'APCA-API-KEY-ID': ALPACA_API_KEY,
-                    // 'APCA-API-SECRET-KEY': 'YOUR_SECRET_KEY' // Souvent nécessaire pour le backend, pas toujours pour le frontend
-                }
-            }
-          );
-          if (!quoteResponse.ok) {
-            const errorText = await quoteResponse.text();
-            console.error(`Alpaca Crypto Quote API Error for ${symbol}: Status ${quoteResponse.status} - ${quoteResponse.statusText}. Body: ${errorText}`);
-            throw new Error(`Erreur API Alpaca Crypto pour ${symbol} (Code: ${quoteResponse.status})`);
-          }
-          const quoteData = await quoteResponse.json();
-          const latestQuote = quoteData.quotes?.[symbol];
-
-          let price: number | undefined;
-          if (latestQuote) {
-            price = (parseFloat(latestQuote.ap) + parseFloat(latestQuote.bp)) / 2; // Prix moyen bid/ask
-          }
-
-          let change24h = 0;
-          let volume24h: number | undefined;
-          // Pour le changement sur 24h, on doit récupérer les bars (OHLCV)
-          // On prend la barre la plus récente et la barre d'il y a 24h
-          const barsResponse = await fetch(
-            `${ALPACA_DATA_BASE_URL}/crypto/${encodeURIComponent(symbol)}/bars?timeframe=1D&limit=2`, {
-                headers: {
-                    'APCA-API-KEY-ID': ALPACA_API_KEY,
-                }
-            }
-          );
-          if (!barsResponse.ok) {
-            const errorText = await barsResponse.text();
-            console.error(`Alpaca Crypto Bars API Error for ${symbol}: Status ${barsResponse.status} - ${barsResponse.statusText}. Body: ${errorText}`);
-            // Ne pas jeter l'erreur ici, car le prix peut être suffisant
-            volume24h = undefined; // Si les bars échouent, le volume est inconnu
-          } else {
-            const barsData = await barsResponse.json();
-            const bars = barsData.bars; // Assurez-vous que la structure est correcte
-            if (bars && bars.length >= 2) {
-              const currentDayBar = bars[bars.length - 1];
-              const previousDayBar = bars[bars.length - 2];
-              if (currentDayBar && previousDayBar && previousDayBar.c !== 0) {
-                change24h = ((currentDayBar.c - previousDayBar.c) / previousDayBar.c) * 100;
-                volume24h = currentDayBar.v;
-              }
-            } else if (bars && bars.length === 1) {
-                // Si seulement une barre est disponible (jour actuel), on ne peut pas calculer le change sur 24h
-                volume24h = bars[0].v;
-            }
-          }
-
-          if (price !== undefined) {
-            item = {
-              symbol: symbol,
-              name: getCryptoName(symbol),
-              price: price,
-              change24h: change24h,
-              marketCap: undefined, // Alpaca ne fournit pas directement la capitalisation boursière sur ces endpoints
-              volume24h: volume24h,
-              type: 'crypto',
-            };
-          } else {
-            console.warn(`Alpaca: Données de prix manquantes pour ${symbol}. Réponse quote:`, quoteData);
-            throw new Error(`Données de prix manquantes pour ${symbol} (Alpaca Crypto)`);
-          }
+        // ATTENTION: Le plan gratuit d'Alpha Vantage est limité à 5 requêtes/minute.
+        // Si vous avez 5 actions, chaque rafraîchissement va consommer 5 requêtes.
+        // Pour un usage gratuit, il est fortement recommandé de réduire le nombre de symboles
+        // ou d'augmenter l'intervalle de rafraîchissement à plusieurs minutes par symbole.
+        const response = await fetch(
+          `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`
+        );
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Alpha Vantage API Error for ${symbol}: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
+          throw new Error(`Erreur API Alpha Vantage pour ${symbol} (Code: ${response.status})`);
         }
+        const data = await response.json();
 
-        if (item) {
+        if (data['Global Quote'] && data['Global Quote']['05. price']) {
+          const price = parseFloat(data['Global Quote']['05. price']);
+          const changePercent = parseFloat(data['Global Quote']['10. change percent'].replace('%', '')) || 0;
+          const volume = parseFloat(data['Global Quote']['06. volume']) || undefined;
+          // Alpha Vantage ne fournit pas directement la capitalisation boursière sur cet endpoint simple
+          // marketCap sera undefined
+          const item = {
+            symbol: symbol,
+            name: getStockName(symbol),
+            price: price,
+            change24h: changePercent,
+            volume24h: volume,
+            type: 'stock',
+          };
           dataCache.set(symbol, { data: item, timestamp: now });
           return item;
+        } else {
+          console.warn(`Alpha Vantage: Données manquantes ou invalides pour ${symbol}. Réponse:`, data);
+          throw new Error(`Données manquantes ou invalides pour ${symbol} (Alpha Vantage)`);
         }
-        return null; // Retourne null si aucune donnée valide n'a pu être construite
       } catch (innerError: any) {
-        console.error(`Failed to process data for ${symbol}:`, innerError.message);
-        return null; // Retourne null sur erreur pour que Promise.allSettled puisse filtrer
+        console.error(`Failed to fetch stock data for ${symbol}:`, innerError.message);
+        return null;
       }
     });
 
-    const results = await Promise.allSettled(fetchPromises);
+    // --- Fetch Cryptos (CoinGecko) ---
+    // CoinGecko /simple/price permet de récupérer plusieurs cryptos en une seule requête
+    const cryptoPromise = (async () => {
+      const cached = dataCache.get('crypto_batch'); // Clé de cache pour le lot de cryptos
+      if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
+        console.log('Using cached data for crypto batch');
+        return cached.data;
+      }
 
-    fetchedItems = results
-      .filter((res) => res.status === 'fulfilled' && res.value !== null)
-      .map((res: PromiseFulfilledResult<MarketItem | null>) => res.value as MarketItem);
+      try {
+        const ids = cryptoSymbols.join(','); // Joindre les IDs pour la requête
+        const response = await fetch(
+          `${COINGECKO_BASE_URL}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`
+        );
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`CoinGecko API Error: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
+          throw new Error(`Erreur API CoinGecko (Code: ${response.status})`);
+        }
+        const data = await response.json();
 
-    if (fetchedItems.length === 0) {
-      toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue. Vérifiez vos clés API et les limites de requêtes.');
-      // Ne pas jeter d'erreur ici pour permettre au composant de rendre un état vide sans crash
-    } else {
-      setMarketData(fetchedItems);
-      toast.success('Données du marché mises à jour !');
+        const cryptoItems: MarketItem[] = cryptoSymbols.map(id => {
+          const cryptoData = data[id];
+          if (cryptoData && cryptoData.usd !== undefined) {
+            return {
+              symbol: id, // Utilisez l'ID CoinGecko comme symbole interne
+              name: getCryptoName(id),
+              price: cryptoData.usd,
+              change24h: cryptoData.usd_24h_change || 0,
+              marketCap: cryptoData.usd_market_cap || undefined,
+              volume24h: cryptoData.usd_24h_vol || undefined,
+              type: 'crypto',
+            } as MarketItem;
+          }
+          console.warn(`CoinGecko: Données manquantes ou invalides pour ${id}. Réponse partielle:`, cryptoData);
+          return null;
+        }).filter(item => item !== null) as MarketItem[];
+
+        if (cryptoItems.length > 0) {
+          // Stocker chaque crypto individuellement dans le cache pour des requêtes futures par symbole
+          cryptoItems.forEach(item => dataCache.set(item.symbol, { data: item, timestamp: now }));
+          // Stocker le lot pour éviter de refaire la requête globale si toutes les cryptos sont dans le cache
+          dataCache.set('crypto_batch', { data: cryptoItems, timestamp: now });
+          return cryptoItems;
+        } else {
+          throw new Error('Aucune donnée crypto valide reçue de CoinGecko.');
+        }
+      } catch (innerError: any) {
+        console.error(`Failed to fetch crypto data from CoinGecko:`, innerError.message);
+        return null; // Retourne null sur erreur
+      }
+    })();
+
+
+    try {
+      // Exécute toutes les promesses en parallèle
+      const [stockResults, cryptoResults] = await Promise.all([
+        Promise.allSettled(stockPromises),
+        cryptoPromise // cryptoPromise est déjà une promesse qui résout en tableau ou null
+      ]);
+
+      // Filtrer les résultats des actions
+      const successfulStockItems: MarketItem[] = stockResults
+        .filter((res) => res.status === 'fulfilled' && res.value !== null)
+        .map((res: PromiseFulfilledResult<MarketItem | null>) => res.value as MarketItem);
+
+      // Ajouter les résultats des cryptos si réussis
+      const successfulCryptoItems: MarketItem[] = Array.isArray(cryptoResults) ? cryptoResults : [];
+
+      fetchedItems = [...successfulStockItems, ...successfulCryptoItems];
+
+      if (fetchedItems.length === 0) {
+        toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue. Vérifiez vos clés API et les limites de requêtes.');
+      } else {
+        setMarketData(fetchedItems);
+        toast.success('Données du marché mises à jour !');
+      }
+
+    } catch (error: any) {
+      console.error('Erreur globale de récupération des données du marché:', error);
+      toast.error(`❌ Erreur de récupération des données du marché: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   // Application des filtres
@@ -282,7 +260,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     setFilteredData(filtered);
   }, [marketData, selectedType, searchTerm, selectedFilter, isFreePlan]);
 
-  // Rafraîchissement toutes les 60 secondes (pour tenter de respecter les limites d'Alpha Vantage)
+  // Rafraîchissement toutes les 60 secondes
   useEffect(() => {
     fetchMarketData(); // Exécute une fois au montage
     const interval = setInterval(() => fetchMarketData(), 60000); // Puis toutes les 60 secondes
@@ -304,7 +282,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aperçu du Marché</h2>
                 {/* Mettre à jour le texte pour refléter les nouvelles APIs */}
-                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Alpha Vantage et Alpaca</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Alpha Vantage et CoinGecko</p>
               </div>
             </div>
             <Button onClick={fetchMarketData} variant="ghost" size="sm" className="p-2" disabled={loading}>
@@ -463,11 +441,12 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
                           : 'bg-gradient-to-r from-blue-500 to-blue-600'
                       }`}
                     >
-                      {item.symbol.slice(0, 3)}
+                      {/* Utilisez le symbole court pour l'affichage, pas l'ID CoinGecko complet */}
+                      {item.symbol.slice(0, 3).toUpperCase()}
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">{item.symbol}</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{item.symbol.toUpperCase()}</h3>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
                             item.type === 'crypto'
