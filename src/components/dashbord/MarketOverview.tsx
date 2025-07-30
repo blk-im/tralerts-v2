@@ -5,10 +5,21 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import toast from 'react-hot-toast'; // Assurez-vous d'avoir toast installé et configuré
 
-// Votre clé API Twelve Data
-const TWELVE_DATA_API_KEY = 'ced07f32e4d0415dab6cc96aa79d4ccc';
-// URL de base de l'API Twelve Data pour les quotes
-const TWELVE_DATA_BASE_URL = 'https://api.twelvedata.com';
+// Vos clés API
+const ALPHA_VANTAGE_API_KEY = 'AI72KH8ESTBNYNNZ';
+const ALPACA_API_KEY = 'PKA6CIB622DQWL15SVRS'; // Note: Alpaca API key est souvent un "API Key ID" et un "Secret Key".
+                                              // Pour les requêtes côté client, l'API Key ID est généralement suffisante
+                                              // si l'endpoint ne nécessite pas d'authentification complète.
+                                              // Si vous rencontrez des problèmes, vérifiez la documentation Alpaca pour l'authentification côté client.
+
+// URLs de base des APIs
+const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
+const ALPACA_DATA_BASE_URL = 'https://data.alpaca.markets/v2'; // Utilisez v2 pour les données de marché
+
+// Durée du cache en millisecondes (ex: 5 minutes)
+const CACHE_DURATION_MS = 5 * 60 * 1000;
+// Cache en mémoire (vide à chaque rechargement de page)
+const dataCache = new Map<string, { data: MarketItem; timestamp: number }>();
 
 interface MarketItem {
   symbol: string;
@@ -36,16 +47,16 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   // Noms pour cryptos et actions (ces listes sont toujours utiles pour l'affichage)
   const getCryptoName = (symbol: string): string => {
     const names: { [key: string]: string } = {
-      BTC: 'Bitcoin',
-      ETH: 'Ethereum',
-      SOL: 'Solana',
-      ADA: 'Cardano',
-      BNB: 'Binance Coin',
-      XRP: 'Ripple',
-      DOT: 'Polkadot',
-      DOGE: 'Dogecoin',
-      AVAX: 'Avalanche',
-      MATIC: 'Polygon',
+      BTCUSD: 'Bitcoin', // Symboles Alpaca
+      ETHUSD: 'Ethereum',
+      SOLUSD: 'Solana',
+      ADAUSD: 'Cardano',
+      BNBUSD: 'Binance Coin',
+      XRPUSD: 'Ripple',
+      DOTUSD: 'Polkadot',
+      DOGEUSD: 'Dogecoin',
+      AVAXUSD: 'Avalanche',
+      MATICUSD: 'Polygon',
     };
     return names[symbol] || symbol;
   };
@@ -76,104 +87,175 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     }).format(value);
 
   const formatLargeNumber = (value: number) => {
-    if (value === undefined || value === null) return 'N/A';
+    if (value === undefined || value === null || isNaN(value)) return 'N/A';
     if (value >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)}T`;
     if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-    return value.toLocaleString();
+    return value.toLocaleString('en-US'); // Utiliser en-US pour les grands nombres sans devise
   };
 
   // Fonction de fetch des données de marché
   const fetchMarketData = useCallback(async () => {
     setLoading(true);
-    try {
-      const symbolsToFetch = [
-        { symbol: 'BTC/USD', marketType: 'crypto' as const, originalSymbol: 'BTC' },
-        { symbol: 'ETH/USD', marketType: 'crypto' as const, originalSymbol: 'ETH' },
-        { symbol: 'SOL/USD', marketType: 'crypto' as const, originalSymbol: 'SOL' },
-        { symbol: 'ADA/USD', marketType: 'crypto' as const, originalSymbol: 'ADA' },
-        { symbol: 'BNB/USD', marketType: 'crypto' as const, originalSymbol: 'BNB' },
-        { symbol: 'AAPL', marketType: 'stock' as const, originalSymbol: 'AAPL' },
-        { symbol: 'MSFT', marketType: 'stock' as const, originalSymbol: 'MSFT' },
-        { symbol: 'GOOGL', marketType: 'stock' as const, originalSymbol: 'GOOGL' },
-        { symbol: 'AMZN', marketType: 'stock' as const, originalSymbol: 'AMZN' },
-        { symbol: 'TSLA', marketType: 'stock' as const, originalSymbol: 'TSLA' },
-      ];
+    let fetchedItems: MarketItem[] = [];
+    const now = Date.now();
 
-      // Twelve Data utilise des endpoints différents pour les quotes (prix actuels)
-      // et les time_series (pour le changement sur 24h, qui nécessite des données historiques)
-      // Pour simplifier, nous allons utiliser l'endpoint 'quote' qui donne le prix et le changement.
-      // Note: Le plan gratuit de Twelve Data peut ne pas fournir toutes les données (marketCap, volume)
-      // ou peut avoir un délai sur certaines données.
+    const symbolsToProcess = [
+      // Actions (Alpha Vantage)
+      { symbol: 'AAPL', type: 'stock' as const },
+      { symbol: 'MSFT', type: 'stock' as const },
+      { symbol: 'GOOGL', type: 'stock' as const },
+      { symbol: 'AMZN', type: 'stock' as const },
+      { symbol: 'TSLA', type: 'stock' as const },
+      // Cryptos (Alpaca)
+      { symbol: 'BTCUSD', type: 'crypto' as const },
+      { symbol: 'ETHUSD', type: 'crypto' as const },
+      { symbol: 'SOLUSD', type: 'crypto' as const },
+      { symbol: 'ADAUSD', type: 'crypto' as const },
+      { symbol: 'BNBUSD', type: 'crypto' as const },
+    ];
 
-      const promises = symbolsToFetch.map(async ({ symbol, marketType, originalSymbol }) => {
-        try {
+    const fetchPromises = symbolsToProcess.map(async ({ symbol, type }) => {
+      const cached = dataCache.get(symbol);
+      if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
+        console.log(`Using cached data for ${symbol}`);
+        return cached.data;
+      }
+
+      try {
+        let item: MarketItem | null = null;
+
+        if (type === 'stock') {
+          // Alpha Vantage pour les actions
+          // ATTENTION: Le plan gratuit d'Alpha Vantage est limité à 5 requêtes/minute.
+          // Si vous avez 5 actions, chaque rafraîchissement va consommer 5 requêtes.
           const response = await fetch(
-            `${TWELVE_DATA_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&apikey=${TWELVE_DATA_API_KEY}`
+            `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`
           );
-
           if (!response.ok) {
             const errorText = await response.text();
-            console.error(`Twelve Data API Error for ${symbol}: Status ${response.status} - ${response.statusText}. Response Body: ${errorText}`);
-            throw new Error(`Erreur API pour ${originalSymbol} (Code: ${response.status})`);
+            console.error(`Alpha Vantage API Error for ${symbol}: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
+            throw new Error(`Erreur API Alpha Vantage pour ${symbol} (Code: ${response.status})`);
           }
-
           const data = await response.json();
 
-          // Vérifier si les données sont valides et contiennent les champs nécessaires
-          // Twelve Data renvoie 'close' pour le prix actuel, 'percent_change' pour le changement sur 24h
-          if (!data || data.status === 'error' || !data.close || data.percent_change === undefined) {
-            console.warn(`Twelve Data: Données vides ou invalides reçues pour ${originalSymbol}. Réponse:`, data);
-            throw new Error(`Données manquantes ou invalides pour ${originalSymbol}`);
+          if (data['Global Quote'] && data['Global Quote']['05. price']) {
+            const price = parseFloat(data['Global Quote']['05. price']);
+            const changePercent = parseFloat(data['Global Quote']['10. change percent'].replace('%', '')) || 0;
+            const volume = parseFloat(data['Global Quote']['06. volume']) || undefined;
+            // Alpha Vantage ne fournit pas directement la capitalisation boursière sur cet endpoint simple
+            // marketCap sera undefined
+            item = {
+              symbol: symbol,
+              name: getStockName(symbol),
+              price: price,
+              change24h: changePercent,
+              volume24h: volume,
+              type: 'stock',
+            };
+          } else {
+            console.warn(`Alpha Vantage: Données manquantes ou invalides pour ${symbol}. Réponse:`, data);
+            throw new Error(`Données manquantes ou invalides pour ${symbol} (Alpha Vantage)`);
+          }
+        } else {
+          // Alpaca pour les cryptos
+          // ATTENTION: Obtenir le changement sur 24h avec Alpaca nécessite de multiples requêtes
+          // ou un plan supérieur. Le code ci-dessous fera 2 requêtes par crypto pour le 24h change.
+          // Cela va consommer vos limites très rapidement sur un plan gratuit.
+          const quoteResponse = await fetch(
+            `${ALPACA_DATA_BASE_URL}/crypto/quotes/latest?symbols=${encodeURIComponent(symbol)}`, {
+                headers: {
+                    'APCA-API-KEY-ID': ALPACA_API_KEY,
+                    // 'APCA-API-SECRET-KEY': 'YOUR_SECRET_KEY' // Souvent nécessaire pour le backend, pas toujours pour le frontend
+                }
+            }
+          );
+          if (!quoteResponse.ok) {
+            const errorText = await quoteResponse.text();
+            console.error(`Alpaca Crypto Quote API Error for ${symbol}: Status ${quoteResponse.status} - ${quoteResponse.statusText}. Body: ${errorText}`);
+            throw new Error(`Erreur API Alpaca Crypto pour ${symbol} (Code: ${quoteResponse.status})`);
+          }
+          const quoteData = await quoteResponse.json();
+          const latestQuote = quoteData.quotes?.[symbol];
+
+          let price: number | undefined;
+          if (latestQuote) {
+            price = (parseFloat(latestQuote.ap) + parseFloat(latestQuote.bp)) / 2; // Prix moyen bid/ask
           }
 
-          // Twelve Data renvoie le volume et la capitalisation boursière dans l'objet quote pour certains plans/endpoints.
-          // Pour le plan gratuit, ces champs peuvent être absents ou nécessiter un endpoint différent.
-          // Nous les rendons optionnels dans l'interface MarketItem.
-          const marketCap = parseFloat(data.market_cap) || undefined; // Twelve Data peut fournir market_cap
-          const volume24h = parseFloat(data.volume) || undefined; // Twelve Data peut fournir volume
+          let change24h = 0;
+          let volume24h: number | undefined;
+          // Pour le changement sur 24h, on doit récupérer les bars (OHLCV)
+          // On prend la barre la plus récente et la barre d'il y a 24h
+          const barsResponse = await fetch(
+            `${ALPACA_DATA_BASE_URL}/crypto/${encodeURIComponent(symbol)}/bars?timeframe=1D&limit=2`, {
+                headers: {
+                    'APCA-API-KEY-ID': ALPACA_API_KEY,
+                }
+            }
+          );
+          if (!barsResponse.ok) {
+            const errorText = await barsResponse.text();
+            console.error(`Alpaca Crypto Bars API Error for ${symbol}: Status ${barsResponse.status} - ${barsResponse.statusText}. Body: ${errorText}`);
+            // Ne pas jeter l'erreur ici, car le prix peut être suffisant
+            volume24h = undefined; // Si les bars échouent, le volume est inconnu
+          } else {
+            const barsData = await barsResponse.json();
+            const bars = barsData.bars; // Assurez-vous que la structure est correcte
+            if (bars && bars.length >= 2) {
+              const currentDayBar = bars[bars.length - 1];
+              const previousDayBar = bars[bars.length - 2];
+              if (currentDayBar && previousDayBar && previousDayBar.c !== 0) {
+                change24h = ((currentDayBar.c - previousDayBar.c) / previousDayBar.c) * 100;
+                volume24h = currentDayBar.v;
+              }
+            } else if (bars && bars.length === 1) {
+                // Si seulement une barre est disponible (jour actuel), on ne peut pas calculer le change sur 24h
+                volume24h = bars[0].v;
+            }
+          }
 
-          return {
-            symbol: originalSymbol, // Utilisez le symbole original pour l'affichage
-            name: marketType === 'crypto' ? getCryptoName(originalSymbol) : getStockName(originalSymbol),
-            price: parseFloat(data.close),
-            change24h: parseFloat(data.percent_change) ?? 0, // Utilisez percent_change
-            marketCap: marketCap,
-            volume24h: volume24h,
-            type: marketType,
-          } as MarketItem;
-        } catch (innerError: any) {
-          console.error(`Failed to fetch data for ${originalSymbol}:`, innerError);
-          // Ne pas propager l'erreur pour permettre aux autres promesses de s'exécuter
-          // Retourner null ou un objet d'erreur pour le filtrage ultérieur
-          return null;
+          if (price !== undefined) {
+            item = {
+              symbol: symbol,
+              name: getCryptoName(symbol),
+              price: price,
+              change24h: change24h,
+              marketCap: undefined, // Alpaca ne fournit pas directement la capitalisation boursière sur ces endpoints
+              volume24h: volume24h,
+              type: 'crypto',
+            };
+          } else {
+            console.warn(`Alpaca: Données de prix manquantes pour ${symbol}. Réponse quote:`, quoteData);
+            throw new Error(`Données de prix manquantes pour ${symbol} (Alpaca Crypto)`);
+          }
         }
-      });
 
-      const results = await Promise.allSettled(promises);
-
-      const marketData: MarketItem[] = results
-        .filter((res) => res.status === 'fulfilled' && res.value !== null)
-        .map((res: PromiseFulfilledResult<MarketItem | null>) => res.value as MarketItem); // Cast pour s'assurer du type
-
-      if (marketData.length === 0) {
-        toast.error('❌ Erreur de récupération des données Twelve Data: Aucune donnée valide reçue.');
-        throw new Error('Aucune donnée valide reçue');
+        if (item) {
+          dataCache.set(symbol, { data: item, timestamp: now });
+          return item;
+        }
+        return null; // Retourne null si aucune donnée valide n'a pu être construite
+      } catch (innerError: any) {
+        console.error(`Failed to process data for ${symbol}:`, innerError.message);
+        return null; // Retourne null sur erreur pour que Promise.allSettled puisse filtrer
       }
+    });
 
-      setMarketData(marketData);
-      toast.success('Données du marché mises à jour avec Twelve Data !');
+    const results = await Promise.allSettled(fetchPromises);
 
-    } catch (error: any) {
-      console.error('Erreur globale de récupération des données Twelve Data:', error);
-      // Le toast est déjà affiché pour le cas marketData.length === 0
-      // Si c'est une autre erreur, on l'affiche ici
-      if (marketData.length > 0 || error.message !== 'Aucune donnée valide reçue') {
-          toast.error(`❌ Erreur de récupération des données Twelve Data: ${error.message}`);
-      }
-    } finally {
-      setLoading(false);
+    fetchedItems = results
+      .filter((res) => res.status === 'fulfilled' && res.value !== null)
+      .map((res: PromiseFulfilledResult<MarketItem | null>) => res.value as MarketItem);
+
+    if (fetchedItems.length === 0) {
+      toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue. Vérifiez vos clés API et les limites de requêtes.');
+      // Ne pas jeter d'erreur ici pour permettre au composant de rendre un état vide sans crash
+    } else {
+      setMarketData(fetchedItems);
+      toast.success('Données du marché mises à jour !');
     }
+    setLoading(false);
   }, []);
 
   // Application des filtres
@@ -195,15 +277,15 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       filtered = filtered.filter((item) => item.change24h < 0).sort((a, b) => a.change24h - b.change24h);
     }
 
-    if (isFreePlan) filtered = filtered.slice(0, 10);
+    if (isFreePlan) filtered = filtered.slice(0, 10); // Limite d'affichage pour le plan gratuit
 
     setFilteredData(filtered);
   }, [marketData, selectedType, searchTerm, selectedFilter, isFreePlan]);
 
-  // Rafraîchissement toutes les 20 secondes (comme discuté)
+  // Rafraîchissement toutes les 60 secondes (pour tenter de respecter les limites d'Alpha Vantage)
   useEffect(() => {
     fetchMarketData(); // Exécute une fois au montage
-    const interval = setInterval(() => fetchMarketData(), 20000); // Puis toutes les 20 secondes
+    const interval = setInterval(() => fetchMarketData(), 60000); // Puis toutes les 60 secondes
     return () => clearInterval(interval); // Nettoyage de l'intervalle au démontage
   }, [fetchMarketData]);
 
@@ -221,8 +303,8 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <Globe className="w-6 h-6 mr-3 text-blue-600" />
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aperçu du Marché</h2>
-                {/* Mettre à jour le texte pour refléter Twelve Data */}
-                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Twelve Data</p>
+                {/* Mettre à jour le texte pour refléter les nouvelles APIs */}
+                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Alpha Vantage et Alpaca</p>
               </div>
             </div>
             <Button onClick={fetchMarketData} variant="ghost" size="sm" className="p-2" disabled={loading}>
@@ -507,7 +589,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <RefreshCw className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <p className="text-2xl font-bold text-blue-600">
-              20s
+              60s
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Fréquence de mise à jour
