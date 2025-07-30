@@ -7,11 +7,12 @@ import toast from 'react-hot-toast'; // Assurez-vous d'avoir toast installé et 
 
 // Votre clé API Alpha Vantage pour les actions
 const ALPHA_VANTAGE_API_KEY = 'AI72KH8ESTBNYNNZ';
-// CoinGecko ne nécessite pas de clé API pour les endpoints de base comme /simple/price
-const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
+// Votre clé API Crypto APIs pour les cryptomonnaies
+const CRYPTOAPIS_API_KEY = 'af3eae58274c8b0f4959ded1e8d8fd0db10cdc89';
 
 // URLs de base des APIs
 const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
+const CRYPTOAPIS_BASE_URL = 'https://api.cryptoapis.io';
 
 // Durée du cache en millisecondes (ex: 5 minutes)
 const CACHE_DURATION_MS = 5 * 60 * 1000;
@@ -44,16 +45,16 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   // Noms pour cryptos et actions (ces listes sont toujours utiles pour l'affichage)
   const getCryptoName = (symbol: string): string => {
     const names: { [key: string]: string } = {
-      bitcoin: 'Bitcoin',
-      ethereum: 'Ethereum',
-      solana: 'Solana',
-      cardano: 'Cardano',
-      'binancecoin': 'Binance Coin', // Note: Binance Coin est 'binancecoin' sur CoinGecko
-      ripple: 'Ripple',
-      polkadot: 'Polkadot',
-      dogecoin: 'Dogecoin',
-      avalanche: 'Avalanche',
-      polygon: 'Polygon',
+      BTC: 'Bitcoin',
+      ETH: 'Ethereum',
+      SOL: 'Solana',
+      ADA: 'Cardano',
+      BNB: 'Binance Coin',
+      XRP: 'Ripple',
+      DOT: 'Polkadot',
+      DOGE: 'Dogecoin',
+      AVAX: 'Avalanche',
+      MATIC: 'Polygon',
     };
     return names[symbol] || symbol;
   };
@@ -98,8 +99,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     const now = Date.now();
 
     const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA'];
-    // Utilisez les IDs de CoinGecko pour les cryptos
-    const cryptoSymbols = ['bitcoin', 'ethereum', 'solana', 'cardano', 'binancecoin'];
+    const cryptoSymbolsForApi = ['BTC', 'ETH', 'SOL', 'ADA', 'BNB']; // Symboles standard pour Crypto APIs
 
     // --- Fetch Actions (Alpha Vantage) ---
     const stockPromises = stockSymbols.map(async (symbol) => {
@@ -150,42 +150,56 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       }
     });
 
-    // --- Fetch Cryptos (CoinGecko) ---
-    // CoinGecko /simple/price permet de récupérer plusieurs cryptos en une seule requête
+    // --- Fetch Cryptos (Crypto APIs) ---
     const cryptoPromise = (async () => {
       const cached = dataCache.get('crypto_batch'); // Clé de cache pour le lot de cryptos
       if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
-        console.log('Using cached data for crypto batch');
+        console.log('Using cached data for crypto batch from Crypto APIs');
         return cached.data;
       }
 
       try {
-        const ids = cryptoSymbols.join(','); // Joindre les IDs pour la requête
+        // ATTENTION: Le plan gratuit de Crypto APIs est limité à 100 requêtes/jour.
+        // Une requête pour plusieurs symboles compte comme 1 requête.
+        // Si vous rafraîchissez toutes les 60 secondes, vous dépasserez la limite journalière.
+        const symbolsParam = cryptoSymbolsForApi.join(',');
         const response = await fetch(
-          `${COINGECKO_BASE_URL}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`
+            `${CRYPTOAPIS_BASE_URL}/v2/market-data/assets/details?symbols=${encodeURIComponent(symbolsParam)}`,
+            {
+                headers: {
+                    'X-API-Key': CRYPTOAPIS_API_KEY,
+                },
+            }
         );
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`CoinGecko API Error: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
-          throw new Error(`Erreur API CoinGecko (Code: ${response.status})`);
+          console.error(`Crypto APIs Error: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
+          throw new Error(`Erreur API Crypto APIs (Code: ${response.status})`);
         }
         const data = await response.json();
 
-        const cryptoItems: MarketItem[] = cryptoSymbols.map(id => {
-          const cryptoData = data[id];
-          if (cryptoData && cryptoData.usd !== undefined) {
-            return {
-              symbol: id, // Utilisez l'ID CoinGecko comme symbole interne
-              name: getCryptoName(id),
-              price: cryptoData.usd,
-              change24h: cryptoData.usd_24h_change || 0,
-              marketCap: cryptoData.usd_market_cap || undefined,
-              volume24h: cryptoData.usd_24h_vol || undefined,
-              type: 'crypto',
-            } as MarketItem;
-          }
-          console.warn(`CoinGecko: Données manquantes ou invalides pour ${id}. Réponse partielle:`, cryptoData);
-          return null;
+        const cryptoItems: MarketItem[] = cryptoSymbolsForApi.map(symbol => {
+            // Crypto APIs renvoie les données dans data.items
+            const assetData = data.data?.items?.find((item: any) => item.symbol === symbol);
+            
+            if (assetData && assetData.price && assetData.price.value !== undefined) {
+                const price = parseFloat(assetData.price.value);
+                const change24h = parseFloat(assetData.price.change24h) || 0;
+                const marketCap = parseFloat(assetData.marketCap) || undefined;
+                const volume24h = parseFloat(assetData.volume24h) || undefined;
+
+                return {
+                    symbol: symbol,
+                    name: getCryptoName(symbol),
+                    price: price,
+                    change24h: change24h,
+                    marketCap: marketCap,
+                    volume24h: volume24h,
+                    type: 'crypto',
+                } as MarketItem;
+            }
+            console.warn(`Crypto APIs: Données manquantes ou invalides pour ${symbol}. Réponse partielle:`, assetData);
+            return null;
         }).filter(item => item !== null) as MarketItem[];
 
         if (cryptoItems.length > 0) {
@@ -195,10 +209,10 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
           dataCache.set('crypto_batch', { data: cryptoItems, timestamp: now });
           return cryptoItems;
         } else {
-          throw new Error('Aucune donnée crypto valide reçue de CoinGecko.');
+          throw new Error('Aucune donnée crypto valide reçue de Crypto APIs.');
         }
       } catch (innerError: any) {
-        console.error(`Failed to fetch crypto data from CoinGecko:`, innerError.message);
+        console.error(`Failed to fetch crypto data from Crypto APIs:`, innerError.message);
         return null; // Retourne null sur erreur
       }
     })();
@@ -282,7 +296,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aperçu du Marché</h2>
                 {/* Mettre à jour le texte pour refléter les nouvelles APIs */}
-                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Alpha Vantage et CoinGecko</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Alpha Vantage et Crypto APIs</p>
               </div>
             </div>
             <Button onClick={fetchMarketData} variant="ghost" size="sm" className="p-2" disabled={loading}>
