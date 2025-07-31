@@ -5,19 +5,10 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import toast from 'react-hot-toast'; // Assurez-vous d'avoir toast installé et configuré
 
-// Votre clé API Alpha Vantage pour les actions
-const ALPHA_VANTAGE_API_KEY = 'AI72KH8ESTBNYNNZ';
-// Votre clé API Crypto APIs pour les cryptomonnaies
-const CRYPTOAPIS_API_KEY = 'af3eae58274c8b0f4959ded1e8d8fd0db10cdc89';
-
-// URLs de base des APIs
-const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
-const CRYPTOAPIS_BASE_URL = 'https://api.cryptoapis.io';
-
-// Durée du cache en millisecondes (ex: 5 minutes)
-const CACHE_DURATION_MS = 5 * 60 * 1000;
-// Cache en mémoire (vide à chaque rechargement de page)
-const dataCache = new Map<string, { data: MarketItem; timestamp: number }>();
+// L'URL de votre fonction serverless Vercel
+// En développement local (si vous utilisez `vercel dev`), ce sera `/api/market-data`
+// En production/preview, Vercel gérera automatiquement le chemin.
+const BACKEND_API_URL = '/api/market-data'; 
 
 interface MarketItem {
   symbol: string;
@@ -92,159 +83,44 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     return value.toLocaleString('en-US'); // Utiliser en-US pour les grands nombres sans devise
   };
 
-  // Fonction de fetch des données de marché
+  // Fonction de fetch des données de marché depuis votre fonction serverless Vercel
   const fetchMarketData = useCallback(async () => {
     setLoading(true);
-    let fetchedItems: MarketItem[] = [];
-    const now = Date.now();
-
-    const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA'];
-    const cryptoSymbolsForApi = ['BTC', 'ETH', 'SOL', 'ADA', 'BNB']; // Symboles standard pour Crypto APIs
-
-    // --- Fetch Actions (Alpha Vantage) ---
-    const stockPromises = stockSymbols.map(async (symbol) => {
-      const cached = dataCache.get(symbol);
-      if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
-        console.log(`Using cached data for stock ${symbol}`);
-        return cached.data;
-      }
-
-      try {
-        // ATTENTION: Le plan gratuit d'Alpha Vantage est limité à 5 requêtes/minute.
-        // Si vous avez 5 actions, chaque rafraîchissement va consommer 5 requêtes.
-        // Pour un usage gratuit, il est fortement recommandé de réduire le nombre de symboles
-        // ou d'augmenter l'intervalle de rafraîchissement à plusieurs minutes par symbole.
-        const response = await fetch(
-          `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`
-        );
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Alpha Vantage API Error for ${symbol}: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
-          throw new Error(`Erreur API Alpha Vantage pour ${symbol} (Code: ${response.status})`);
-        }
-        const data = await response.json();
-
-        if (data['Global Quote'] && data['Global Quote']['05. price']) {
-          const price = parseFloat(data['Global Quote']['05. price']);
-          const changePercent = parseFloat(data['Global Quote']['10. change percent'].replace('%', '')) || 0;
-          const volume = parseFloat(data['Global Quote']['06. volume']) || undefined;
-          // Alpha Vantage ne fournit pas directement la capitalisation boursière sur cet endpoint simple
-          // marketCap sera undefined
-          const item = {
-            symbol: symbol,
-            name: getStockName(symbol),
-            price: price,
-            change24h: changePercent,
-            volume24h: volume,
-            type: 'stock',
-          };
-          dataCache.set(symbol, { data: item, timestamp: now });
-          return item;
-        } else {
-          console.warn(`Alpha Vantage: Données manquantes ou invalides pour ${symbol}. Réponse:`, data);
-          throw new Error(`Données manquantes ou invalides pour ${symbol} (Alpha Vantage)`);
-        }
-      } catch (innerError: any) {
-        console.error(`Failed to fetch stock data for ${symbol}:`, innerError.message);
-        return null;
-      }
-    });
-
-    // --- Fetch Cryptos (Crypto APIs) ---
-    const cryptoPromise = (async () => {
-      const cached = dataCache.get('crypto_batch'); // Clé de cache pour le lot de cryptos
-      if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
-        console.log('Using cached data for crypto batch from Crypto APIs');
-        return cached.data;
-      }
-
-      try {
-        // ATTENTION: Le plan gratuit de Crypto APIs est limité à 100 requêtes/jour.
-        // Une requête pour plusieurs symboles compte comme 1 requête.
-        // Si vous rafraîchissez toutes les 60 secondes, vous dépasserez la limite journalière.
-        const symbolsParam = cryptoSymbolsForApi.join(',');
-        const response = await fetch(
-            `${CRYPTOAPIS_BASE_URL}/v2/market-data/assets/details?symbols=${encodeURIComponent(symbolsParam)}`,
-            {
-                headers: {
-                    'X-API-Key': CRYPTOAPIS_API_KEY,
-                },
-            }
-        );
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Crypto APIs Error: Status ${response.status} - ${response.statusText}. Body: ${errorText}`);
-          throw new Error(`Erreur API Crypto APIs (Code: ${response.status})`);
-        }
-        const data = await response.json();
-
-        const cryptoItems: MarketItem[] = cryptoSymbolsForApi.map(symbol => {
-            // Crypto APIs renvoie les données dans data.items
-            const assetData = data.data?.items?.find((item: any) => item.symbol === symbol);
-            
-            if (assetData && assetData.price && assetData.price.value !== undefined) {
-                const price = parseFloat(assetData.price.value);
-                const change24h = parseFloat(assetData.price.change24h) || 0;
-                const marketCap = parseFloat(assetData.marketCap) || undefined;
-                const volume24h = parseFloat(assetData.volume24h) || undefined;
-
-                return {
-                    symbol: symbol,
-                    name: getCryptoName(symbol),
-                    price: price,
-                    change24h: change24h,
-                    marketCap: marketCap,
-                    volume24h: volume24h,
-                    type: 'crypto',
-                } as MarketItem;
-            }
-            console.warn(`Crypto APIs: Données manquantes ou invalides pour ${symbol}. Réponse partielle:`, assetData);
-            return null;
-        }).filter(item => item !== null) as MarketItem[];
-
-        if (cryptoItems.length > 0) {
-          // Stocker chaque crypto individuellement dans le cache pour des requêtes futures par symbole
-          cryptoItems.forEach(item => dataCache.set(item.symbol, { data: item, timestamp: now }));
-          // Stocker le lot pour éviter de refaire la requête globale si toutes les cryptos sont dans le cache
-          dataCache.set('crypto_batch', { data: cryptoItems, timestamp: now });
-          return cryptoItems;
-        } else {
-          throw new Error('Aucune donnée crypto valide reçue de Crypto APIs.');
-        }
-      } catch (innerError: any) {
-        console.error(`Failed to fetch crypto data from Crypto APIs:`, innerError.message);
-        return null; // Retourne null sur erreur
-      }
-    })();
-
-
     try {
-      // Exécute toutes les promesses en parallèle
-      const [stockResults, cryptoResults] = await Promise.all([
-        Promise.allSettled(stockPromises),
-        cryptoPromise // cryptoPromise est déjà une promesse qui résout en tableau ou null
-      ]);
+      // Appel à votre fonction serverless Vercel
+      const response = await fetch(BACKEND_API_URL); 
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(`Vercel API Function Error: Status ${response.status} - ${response.statusText}. Error:`, errorData.error);
+        throw new Error(`Erreur de récupération des données depuis votre fonction Vercel: ${errorData.error || response.statusText}`);
+      }
+      
+      const data = await response.json();
 
-      // Filtrer les résultats des actions
-      const successfulStockItems: MarketItem[] = stockResults
-        .filter((res) => res.status === 'fulfilled' && res.value !== null)
-        .map((res: PromiseFulfilledResult<MarketItem | null>) => res.value as MarketItem);
+      // Les noms des cryptos et actions sont maintenant gérés par le backend,
+      // mais nous les gardons ici pour la fonction `getCryptoName`/`getStockName`
+      // si elles sont utilisées ailleurs ou pour la logique de filtrage/affichage.
+      const processedData: MarketItem[] = data.map((item: any) => ({
+        symbol: item.symbol,
+        name: item.type === 'crypto' ? getCryptoName(item.symbol) : getStockName(item.symbol),
+        price: item.price,
+        change24h: item.change24h,
+        marketCap: item.marketCap,
+        volume24h: item.volume24h,
+        type: item.type,
+      }));
 
-      // Ajouter les résultats des cryptos si réussis
-      const successfulCryptoItems: MarketItem[] = Array.isArray(cryptoResults) ? cryptoResults : [];
-
-      fetchedItems = [...successfulStockItems, ...successfulCryptoItems];
-
-      if (fetchedItems.length === 0) {
-        toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue. Vérifiez vos clés API et les limites de requêtes.');
+      if (processedData.length === 0) {
+        toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue de votre fonction Vercel.');
       } else {
-        setMarketData(fetchedItems);
-        toast.success('Données du marché mises à jour !');
+        setMarketData(processedData);
+        toast.success('Données du marché mises à jour via votre fonction Vercel !');
       }
 
     } catch (error: any) {
       console.error('Erreur globale de récupération des données du marché:', error);
-      toast.error(`❌ Erreur de récupération des données du marché: ${error.message}`);
+      toast.error(`❌ Erreur de récupération des données du marché: ${error.message}. Assurez-vous que votre fonction Vercel est déployée et fonctionne.`);
     } finally {
       setLoading(false);
     }
@@ -295,8 +171,8 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <Globe className="w-6 h-6 mr-3 text-blue-600" />
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aperçu du Marché</h2>
-                {/* Mettre à jour le texte pour refléter les nouvelles APIs */}
-                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via Alpha Vantage et Crypto APIs</p>
+                {/* Mettre à jour le texte pour refléter l'utilisation de la fonction Vercel */}
+                <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via votre fonction Vercel</p>
               </div>
             </div>
             <Button onClick={fetchMarketData} variant="ghost" size="sm" className="p-2" disabled={loading}>
@@ -455,7 +331,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
                           : 'bg-gradient-to-r from-blue-500 to-blue-600'
                       }`}
                     >
-                      {/* Utilisez le symbole court pour l'affichage, pas l'ID CoinGecko complet */}
+                      {/* Utilisez le symbole court pour l'affichage */}
                       {item.symbol.slice(0, 3).toUpperCase()}
                     </div>
                     <div>
@@ -520,7 +396,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         <Card>
           <CardContent className="p-6">
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center text-lg">
+              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center text-lg}>
                 <Crown className="w-5 h-5 mr-2" />
                 Débloquez l&apos;Aperçu Complet du Marché
               </h4>
