@@ -396,9 +396,9 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         <Card>
           <CardContent className="p-6">
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center text-lg}>
+              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center text-lg">
                 <Crown className="w-5 h-5 mr-2" />
-                Débloquez l&apos;Aperçu Complet du Marché
+                Débloquez l'Aperçu Complet du Marché
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
