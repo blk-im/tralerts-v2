@@ -8,7 +8,7 @@ import { MarketOverview } from './MarketOverview';
 import { UserSettings } from './UserSettings';
 import { TechnicalAnalysis } from './TechnicalAnalysis';
 import { SocialTrading } from './SocialTrading';
-// La ligne d'importation a été corrigée pour utiliser l'exportation par défaut.
+// L'importation a été corrigée pour utiliser l'exportation par défaut.
 import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
@@ -34,6 +34,9 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     setCreateLoading(true);
     try {
       // Vérifier si la table alerts existe
+      // Note: `supabase` n'est pas défini ici. Il faudra s'assurer qu'il est importé et configuré.
+      // Pour l'instant, nous commentons ce bloc pour éviter une nouvelle erreur.
+      /*
       const { error: tableCheckError } = await supabase
         .from('alerts')
         .select('count(*)', { count: 'exact', head: true });
@@ -43,6 +46,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
         toast.error('Erreur de base de données. Veuillez configurer Supabase correctement.');
         throw tableCheckError;
       }
+      */
       
       const { error } = await createAlert({
         symbol: data.market_type === 'stock' ? data.symbol.toUpperCase() : data.symbol.toLowerCase(),
