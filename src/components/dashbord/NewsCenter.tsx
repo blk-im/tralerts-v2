@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Newspaper, ExternalLink, Clock, TrendingUp, Filter, Search, Crown, Zap, RefreshCw } from 'lucide-react';
+import { finnhubService } from '../../services/finnhubService';
 
+// Création des composants de base pour rendre le fichier autonome
 // Fonction utilitaire de remplacement pour 'clsx' ou 'classnames'
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
 
-// Création des composants de base pour rendre le fichier autonome
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -45,7 +46,7 @@ CardContent.displayName = 'CardContent';
 const Button = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    variant?: 'primary' | 'secondary' | 'ghost';
+    variant?: 'primary' | 'secondary' | 'ghost' | 'default';
     size?: 'sm' | 'default' | 'lg' | 'icon';
     loading?: boolean;
   }
@@ -109,6 +110,18 @@ interface NewsItem {
   impact: 'high' | 'medium' | 'low';
 }
 
+interface FinnhubNewsItem {
+  category: 'general' | 'forex' | 'crypto' | 'merger' | 'stock';
+  datetime: number;
+  headline: string;
+  id: number;
+  image: string;
+  related: string;
+  source: string;
+  summary: string;
+  url: string;
+}
+
 interface NewsCenterProps {
   onPremiumUpgrade?: () => void;
 }
@@ -119,44 +132,9 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'crypto' | 'stock' | 'general'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isFreePlan] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState<number | null>(null);
-
-  useEffect(() => {
-    // Appel initial des actualités
-    fetchNews();
-    
-    // Rafraîchir les actualités toutes les 30 secondes
-    const interval = setInterval(fetchNews, 30 * 1000); 
-    setRefreshInterval(interval);
-    
-    return () => {
-      if (refreshInterval) clearInterval(refreshInterval);
-    };
-  }, []);
-
-  const fetchNews = async () => {
-    setLoading(true);
-    
-    try {
-      // Les appels API ont été désactivés car ils ne sont pas pris en charge dans cet environnement.
-      // Nous utilisons des données statiques pour simuler le comportement.
-      const allNews = getFallbackNews();
-      
-      // Trier par date de publication (plus récentes en premier)
-      allNews.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      
-      setNews(allNews);
-    } catch (error) {
-      console.error('Error fetching news:', error);
-      setNews(getFallbackNews());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  // Déterminer le sentiment d'une actualité
-  const getSentiment = (title: string): 'positive' | 'negative' | 'neutral' => {
+  
+  // Fonctions utilitaires pour dériver le sentiment et l'impact du titre
+  const getSentiment = useCallback((title: string): 'positive' | 'negative' | 'neutral' => {
     const positiveWords = ['hausse', 'record', 'dépasse', 'succès', 'croissance', 'positif', 'gain', 'rally', 'bullish', 'dévoile', 'lance', 'augmente'];
     const negativeWords = ['baisse', 'chute', 'perte', 'échec', 'inquiétude', 'risque', 'bearish', 'crash', 'réduit', 'diminue', 'recule'];
     
@@ -171,10 +149,9 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     }
     
     return 'neutral';
-  };
+  }, []);
 
-  // Déterminer l'impact d'une actualité
-  const getImpact = (title: string): 'high' | 'medium' | 'low' => {
+  const getImpact = useCallback((title: string): 'high' | 'medium' | 'low' => {
     const highImpactWords = ['record', 'historique', 'majeur', 'milliard', 'révolution', 'rupture', 'BCE', 'Fed', 'inflation'];
     const mediumImpactWords = ['important', 'significatif', 'million', 'croissance', 'investissement', 'baisse', 'hausse'];
     
@@ -189,85 +166,60 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     }
     
     return 'low';
-  };
+  }, []);
 
-  // Actualités de secours en cas d'erreur API
-  const getFallbackNews = (): NewsItem[] => {
-    return [
-      // Actualités 2025 via Finnhub
-      { 
-        id: '1', 
-        title: 'Bitcoin atteint un nouveau record historique à 120 000$ en 2025',
-        summary: 'Le Bitcoin a franchi un nouveau record historique, dépassant les 120 000$ pour la première fois de son histoire.',
-        source: 'Finnhub',
-        publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        url: 'https://finnhub.io',
-        category: 'crypto',
-        sentiment: 'positive',
-        impact: 'high'
-      },
-      { 
-        id: '2', 
-        title: 'Apple dévoile l\'iPhone 17 avec IA intégrée',
-        summary: 'Apple a présenté son nouvel iPhone 17 avec des capacités d\'intelligence artificielle révolutionnaires intégrées directement dans le matériel.',
-        source: 'Finnhub',
-        publishedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-        url: 'https://finnhub.io',
-        category: 'stock',
-        sentiment: 'positive',
-        impact: 'high'
-      },
-      { 
-        id: '3', 
-        title: 'Ethereum 2.0 complète sa transition vers le Proof of Stake',
-        summary: 'Ethereum a finalisé sa transition complète vers le Proof of Stake, réduisant sa consommation d\'énergie de 99.9% et augmentant sa capacité de traitement.',
-        source: 'Finnhub',
-        publishedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-        url: 'https://finnhub.io',
-        category: 'crypto',
-        sentiment: 'positive',
-        impact: 'high'
-      },
-      { 
-        id: '4', 
-        title: 'La Fed maintient ses taux directeurs en 2025',
-        summary: 'La Réserve fédérale américaine a décidé de maintenir ses taux directeurs inchangés lors de sa dernière réunion, citant des préoccupations concernant l\'inflation.',
-        source: 'Finnhub',
-        publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-        url: 'https://finnhub.io',
-        category: 'stock',
-        sentiment: 'neutral',
-        impact: 'high'
-      },
-      { 
-        id: '5', 
-        title: 'Nouvelles régulations crypto en Europe pour 2025',
-        summary: 'L\'Union européenne a annoncé un nouveau cadre réglementaire pour les cryptomonnaies qui entrera en vigueur en 2025.',
-        source: 'Finnhub',
-        publishedAt: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(),
-        url: 'https://finnhub.io',
-        category: 'crypto',
-        sentiment: 'neutral',
-        impact: 'high'
-      },
-      { 
-        id: '6', 
-        title: 'La production industrielle de la Chine en hausse pour le troisième trimestre',
-        summary: 'Les données économiques chinoises montrent une augmentation de la production industrielle, ce qui pourrait avoir un impact positif sur les marchés mondiaux.',
-        source: 'Finnhub',
-        publishedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-        url: 'https://finnhub.io',
-        category: 'stock',
-        sentiment: 'positive',
-        impact: 'medium'
-      }
-    ];
-  };
+  // Fonction pour formater les actualités de Finnhub
+  const formatNews = useCallback((rawNews: FinnhubNewsItem[]): NewsItem[] => {
+    return rawNews.map(item => ({
+      id: item.id.toString(),
+      title: item.headline,
+      summary: item.summary,
+      source: item.source,
+      publishedAt: new Date(item.datetime * 1000).toISOString(),
+      url: item.url,
+      category: item.category as 'crypto' | 'stock' | 'general', // On se base sur la catégorie de l'API
+      sentiment: getSentiment(item.headline),
+      impact: getImpact(item.headline),
+    }));
+  }, [getSentiment, getImpact]);
+
+  // Fonction de récupération des actualités
+  const fetchNews = useCallback(async () => {
+    setLoading(true);
+    
+    try {
+      // Appel de l'API Finnhub via le service
+      const rawNews = await finnhubService.getMarketNews('general');
+      const formattedNews = formatNews(rawNews);
+      
+      // Trier par date de publication (plus récentes en premier)
+      formattedNews.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      
+      setNews(formattedNews);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des actualités:', error);
+      setNews([]); // En cas d'échec, vider les actualités
+    } finally {
+      setLoading(false);
+    }
+  }, [formatNews]);
+
+  useEffect(() => {
+    // Appel initial des actualités
+    fetchNews();
+    
+    // Rafraîchir les actualités toutes les 30 secondes
+    const intervalId = setInterval(fetchNews, 30 * 1000);
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [fetchNews]);
 
   const filteredNews = news.filter(item => {
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || item.category.toLowerCase() === selectedCategory;
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.summary.toLowerCase().includes(searchTerm.toLowerCase());
+      item.summary.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -279,9 +231,9 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
     
-    if (diffInMinutes < 60) return `Il y a ${diffInMinutes}min`;
+    if (diffInMinutes < 60) return `Il y a ${diffInMinutes} min`;
     const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `Il y a ${diffInHours}h`;
+    if (diffInHours < 24) return `Il y a ${diffInHours} h`;
     return `Il y a ${Math.floor(diffInHours / 24)} jour(s)`;
   };
 
