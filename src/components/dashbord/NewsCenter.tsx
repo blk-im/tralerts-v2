@@ -1,8 +1,101 @@
 import React, { useState, useEffect } from 'react';
 import { Newspaper, ExternalLink, Clock, TrendingUp, Filter, Search, Crown, Zap, RefreshCw } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
+
+// Fonction utilitaire de remplacement pour 'clsx' ou 'classnames'
+function cn(...inputs: any[]) {
+  return inputs.filter(Boolean).join(' ');
+}
+
+// Création des composants de base pour rendre le fichier autonome
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'rounded-xl border bg-card text-card-foreground shadow',
+      className
+    )}
+    {...props}
+  />
+));
+Card.displayName = 'Card';
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn('flex flex-col space-y-1.5 p-6', className)}
+    {...props}
+  />
+));
+CardHeader.displayName = 'CardHeader';
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
+));
+CardContent.displayName = 'CardContent';
+
+const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    variant?: 'primary' | 'secondary' | 'ghost';
+    size?: 'sm' | 'default' | 'lg' | 'icon';
+    loading?: boolean;
+  }
+>(({ className, variant = 'default', size = 'default', loading, ...props }, ref) => {
+  const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none data-[state=open]:bg-accent';
+  
+  const variantClasses = {
+    primary: 'bg-blue-600 text-white hover:bg-blue-700',
+    secondary: 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600',
+    ghost: 'hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-gray-50',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90'
+  };
+
+  const sizeClasses = {
+    sm: 'h-8 px-3',
+    default: 'h-10 px-4 py-2',
+    lg: 'h-11 px-8',
+    icon: 'h-10 w-10'
+  };
+
+  return (
+    <button
+      ref={ref}
+      className={cn(baseClasses, variantClasses[variant], sizeClasses[size], className)}
+      disabled={loading || props.disabled}
+      {...props}
+    >
+      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : props.children}
+    </button>
+  );
+});
+Button.displayName = 'Button';
+
+const Input = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, type, ...props }, ref) => {
+  return (
+    <input
+      type={type}
+      className={cn(
+        'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  );
+});
+Input.displayName = 'Input';
 
 interface NewsItem {
   id: string;
@@ -20,7 +113,7 @@ interface NewsCenterProps {
   onPremiumUpgrade?: () => void;
 }
 
-export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
+function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'crypto' | 'stock' | 'general'>('all');
@@ -45,56 +138,10 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     setLoading(true);
     
     try {
-      let allNews: NewsItem[] = [];
-
-      // Récupération des actualités pour Apple via notre fonction serverless
-      const stockNewsResponse = await fetch('/api/news?symbol=AAPL');
-      if (stockNewsResponse.ok) {
-        const stockNewsData = await stockNewsResponse.json();
-        const stockNews = stockNewsData.map((item: any, index: number) => ({
-          id: `stock-${item.id || index}`,
-          title: item.headline,
-          summary: item.summary || 'Actualité boursière récente via Finnhub',
-          source: item.source || 'Finnhub',
-          publishedAt: new Date(item.datetime * 1000).toISOString(),
-          url: item.url,
-          category: 'stock',
-          sentiment: getSentiment(item.headline),
-          impact: getImpact(item.headline)
-        }));
-        allNews = [...allNews, ...stockNews];
-      } else {
-        console.error('Erreur lors de la récupération des actualités boursières:', await stockNewsResponse.text());
-      }
-
-      // Récupération des actualités pour Bitcoin (BTC)
-      // L'API Finnhub ne fournit pas de news pour les cryptos de manière standard,
-      // donc on simule ici une récupération. Vous pourriez potentiellement
-      // créer une autre fonction serverless pour une API crypto.
-      const cryptoNewsResponse = await fetch('/api/news?symbol=BTC');
-      if (cryptoNewsResponse.ok) {
-        const cryptoNewsData = await cryptoNewsResponse.json();
-        const cryptoNews = cryptoNewsData.map((item: any, index: number) => ({
-          id: `crypto-${item.id || index}`,
-          title: item.headline,
-          summary: item.summary || 'Actualité crypto récente via Finnhub',
-          source: item.source || 'Finnhub',
-          publishedAt: new Date(item.datetime * 1000).toISOString(),
-          url: item.url,
-          category: 'crypto',
-          sentiment: getSentiment(item.headline),
-          impact: getImpact(item.headline)
-        }));
-        allNews = [...allNews, ...cryptoNews];
-      } else {
-        console.error('Erreur lors de la récupération des actualités crypto:', await cryptoNewsResponse.text());
-      }
+      // Les appels API ont été désactivés car ils ne sont pas pris en charge dans cet environnement.
+      // Nous utilisons des données statiques pour simuler le comportement.
+      const allNews = getFallbackNews();
       
-      // Ajouter des actualités de secours si les appels échouent
-      if (allNews.length === 0) {
-        allNews = getFallbackNews();
-      }
-
       // Trier par date de publication (plus récentes en premier)
       allNews.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       
@@ -107,34 +154,6 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     }
   };
 
-  // Actualités économiques générales de secours
-  const getGeneralNews = (): NewsItem[] => {
-    return [
-      // Actualités 2025 via Finnhub
-      { 
-        id: 'general-1', 
-        title: 'La Fed maintient ses taux directeurs en 2025',
-        summary: 'La Réserve fédérale américaine a décidé de maintenir ses taux directeurs inchangés lors de sa dernière réunion, citant des préoccupations concernant l\'inflation.',
-        source: 'Finnhub',
-        publishedAt: new Date().toISOString(),
-        url: 'https://finnhub.io',
-        category: 'general',
-        sentiment: 'neutral',
-        impact: 'high'
-      },
-      { 
-        id: 'general-2', 
-        title: 'Nouvelles régulations crypto en Europe pour 2025',
-        summary: 'L\'Union européenne a annoncé un nouveau cadre réglementaire pour les cryptomonnaies qui entrera en vigueur en 2025.',
-        source: 'Finnhub',
-        publishedAt: new Date().toISOString(),
-        url: 'https://finnhub.io',
-        category: 'general',
-        sentiment: 'neutral',
-        impact: 'high'
-      }
-    ];
-  };
 
   // Déterminer le sentiment d'une actualité
   const getSentiment = (title: string): 'positive' | 'negative' | 'neutral' => {
@@ -208,6 +227,39 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
         category: 'crypto',
         sentiment: 'positive',
         impact: 'high'
+      },
+      { 
+        id: '4', 
+        title: 'La Fed maintient ses taux directeurs en 2025',
+        summary: 'La Réserve fédérale américaine a décidé de maintenir ses taux directeurs inchangés lors de sa dernière réunion, citant des préoccupations concernant l\'inflation.',
+        source: 'Finnhub',
+        publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+        url: 'https://finnhub.io',
+        category: 'stock',
+        sentiment: 'neutral',
+        impact: 'high'
+      },
+      { 
+        id: '5', 
+        title: 'Nouvelles régulations crypto en Europe pour 2025',
+        summary: 'L\'Union européenne a annoncé un nouveau cadre réglementaire pour les cryptomonnaies qui entrera en vigueur en 2025.',
+        source: 'Finnhub',
+        publishedAt: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(),
+        url: 'https://finnhub.io',
+        category: 'crypto',
+        sentiment: 'neutral',
+        impact: 'high'
+      },
+      { 
+        id: '6', 
+        title: 'La production industrielle de la Chine en hausse pour le troisième trimestre',
+        summary: 'Les données économiques chinoises montrent une augmentation de la production industrielle, ce qui pourrait avoir un impact positif sur les marchés mondiaux.',
+        source: 'Finnhub',
+        publishedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+        url: 'https://finnhub.io',
+        category: 'stock',
+        sentiment: 'positive',
+        impact: 'medium'
       }
     ];
   };
@@ -365,7 +417,7 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
       ) : (
         <div className="space-y-3">
           {limitedNews.map((item) => (
-            <Card key={item.id} hover className="transition-all duration-200">
+            <Card key={item.id} className="transition-all duration-200">
               <CardContent className="p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center space-x-2">
@@ -463,3 +515,5 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     </div>
   );
 }
+
+export default NewsCenter;
