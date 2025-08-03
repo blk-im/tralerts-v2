@@ -327,3 +327,4 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     </div>
   );
 }
+
