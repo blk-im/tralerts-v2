@@ -84,7 +84,8 @@ module.exports = async (req, res) => {
                 // Appel FreeCryptoAPI.com pour les cryptos
                 // Point de terminaison supposé, à ajuster si besoin
                 const response = await fetch(
-                    `${FREE_CRYPTO_API_BASE_URL}/quotes/latest?symbol=${encodeURIComponent(symbol)}&CMC_PRO_API_KEY=${FREE_CRYPTO_API_KEY}`
+                    // MODIFIEZ CETTE LIGNE AVEC LE NOM CORRECT DU PARAMÈTRE DE LA CLÉ API
+                    `${FREE_CRYPTO_API_BASE_URL}/quotes/latest?symbol=${encodeURIComponent(symbol)}&[NOM_DU_PARAMÈTRE_CORRECT]=${FREE_CRYPTO_API_KEY}`
                 );
                 if (!response.ok) {
                     const errorText = await response.text();
