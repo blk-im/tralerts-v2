@@ -122,7 +122,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const [refreshInterval, setRefreshInterval] = useState<number | null>(null);
 
   useEffect(() => {
-    // Appel initial des actualités pour quelques symboles par défaut
+    // Appel initial des actualités
     fetchNews();
     
     // Rafraîchir les actualités toutes les 30 secondes
