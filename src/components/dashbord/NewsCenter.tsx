@@ -29,6 +29,7 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const [refreshInterval, setRefreshInterval] = useState<number | null>(null);
 
   useEffect(() => {
+    // Appel initial des actualités pour quelques symboles par défaut
     fetchNews();
     
     // Rafraîchir les actualités toutes les 30 secondes
@@ -43,27 +44,37 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const fetchNews = async () => {
     setLoading(true);
     
-    // Utiliser Finnhub pour les actualités
-    const apiKey = import.meta.env.VITE_FINNHUB_API_KEY;
-    if (!apiKey) {
-      console.error('Finnhub API key not found');
-      setNews(getFallbackNews());
-      setLoading(false);
-      return;
-    }
-    
     try {
-      // Récupérer les actualités crypto et actions depuis Finnhub
-      const cryptoNewsResponse = await fetch(`https://finnhub.io/api/v1/news?category=crypto&minId=10&token=${apiKey}`);
-      const stockNewsResponse = await fetch(`https://finnhub.io/api/v1/news?category=general&minId=10&token=${apiKey}`);
-      
       let allNews: NewsItem[] = [];
-      
+
+      // Récupération des actualités pour Apple via notre fonction serverless
+      const stockNewsResponse = await fetch('/api/news?symbol=AAPL');
+      if (stockNewsResponse.ok) {
+        const stockNewsData = await stockNewsResponse.json();
+        const stockNews = stockNewsData.map((item: any, index: number) => ({
+          id: `stock-${item.id || index}`,
+          title: item.headline,
+          summary: item.summary || 'Actualité boursière récente via Finnhub',
+          source: item.source || 'Finnhub',
+          publishedAt: new Date(item.datetime * 1000).toISOString(),
+          url: item.url,
+          category: 'stock',
+          sentiment: getSentiment(item.headline),
+          impact: getImpact(item.headline)
+        }));
+        allNews = [...allNews, ...stockNews];
+      } else {
+        console.error('Erreur lors de la récupération des actualités boursières:', await stockNewsResponse.text());
+      }
+
+      // Récupération des actualités pour Bitcoin (BTC)
+      // L'API Finnhub ne fournit pas de news pour les cryptos de manière standard,
+      // donc on simule ici une récupération. Vous pourriez potentiellement
+      // créer une autre fonction serverless pour une API crypto.
+      const cryptoNewsResponse = await fetch('/api/news?symbol=BTC');
       if (cryptoNewsResponse.ok) {
         const cryptoNewsData = await cryptoNewsResponse.json();
-        
-        // Transformer les données en format NewsItem
-        const cryptoNews = cryptoNewsData.slice(0, 10).map((item: any, index: number) => ({
+        const cryptoNews = cryptoNewsData.map((item: any, index: number) => ({
           id: `crypto-${item.id || index}`,
           title: item.headline,
           summary: item.summary || 'Actualité crypto récente via Finnhub',
@@ -74,42 +85,22 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
           sentiment: getSentiment(item.headline),
           impact: getImpact(item.headline)
         }));
-        
         allNews = [...allNews, ...cryptoNews];
+      } else {
+        console.error('Erreur lors de la récupération des actualités crypto:', await cryptoNewsResponse.text());
       }
       
-      if (stockNewsResponse.ok) {
-        const stockNewsData = await stockNewsResponse.json();
-        
-        // Transformer les données en format NewsItem
-        const stockNews = stockNewsData.slice(0, 10).map((item: any, index: number) => ({
-          id: `stock-${item.id || index}`,
-          title: item.headline,
-          summary: item.summary || 'Actualité boursière récente via Finnhub',
-          source: item.source || 'Finnhub',
-          publishedAt: new Date(item.datetime * 1000).toISOString(),
-          url: item.url,
-          category: item.category === 'crypto' ? 'crypto' : 'stock',
-          sentiment: getSentiment(item.headline),
-          impact: getImpact(item.headline)
-        }));
-        
-        allNews = [...allNews, ...stockNews];
+      // Ajouter des actualités de secours si les appels échouent
+      if (allNews.length === 0) {
+        allNews = getFallbackNews();
       }
-      
-      // Ajouter quelques actualités économiques générales si nécessaire
-      if (allNews.length < 5) {
-        const generalNews = getGeneralNews();
-        allNews = [...allNews, ...generalNews];
-      }
-      
+
       // Trier par date de publication (plus récentes en premier)
       allNews.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       
       setNews(allNews);
     } catch (error) {
       console.error('Error fetching news:', error);
-      // Utiliser des données de secours en cas d'erreur
       setNews(getFallbackNews());
     } finally {
       setLoading(false);
@@ -224,7 +215,7 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const filteredNews = news.filter(item => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.summary.toLowerCase().includes(searchTerm.toLowerCase());
+                          item.summary.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -379,7 +370,7 @@ export function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center space-x-2">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      item.category === 'crypto' 
+                      item.category === 'crypto'  
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
                         : item.category === 'stock'
                         ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
