@@ -8,7 +8,7 @@ import { MarketOverview } from './MarketOverview';
 import { UserSettings } from './UserSettings';
 import { TechnicalAnalysis } from './TechnicalAnalysis';
 import { SocialTrading } from './SocialTrading';
-import { NewsCenter } from './NewsCenter';
+import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
 import { useAlerts } from '../../hooks/useAlerts';
@@ -73,15 +73,35 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   };
 
   const handleDeleteAlert = async (alertId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette alerte ?')) {
-      const { error } = await deleteAlert(alertId);
-      if (error) {
-        console.error('Error deleting alert:', error);
-        toast.error('Erreur lors de la suppression');
-      } else {
-        toast.success('Alerte supprimée avec succès');
-      }
-    }
+    // Remplacé confirm() par un toast pour éviter les blocages
+    toast((t) => (
+      <div>
+        <p className="text-gray-900 dark:text-white">Êtes-vous sûr de vouloir supprimer cette alerte ?</p>
+        <div className="mt-2 flex justify-end space-x-2">
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1 rounded-md text-sm"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id);
+              const { error } = await deleteAlert(alertId);
+              if (error) {
+                console.error('Error deleting alert:', error);
+                toast.error('Erreur lors de la suppression');
+              } else {
+                toast.success('Alerte supprimée avec succès');
+              }
+            }}
+            className="bg-red-600 text-white px-3 py-1 rounded-md text-sm"
+          >
+            Supprimer
+          </button>
+        </div>
+      </div>
+    ));
   };
 
   const handleToggleAlert = async (alertId: string, isActive: boolean) => {
@@ -115,15 +135,15 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   };
 
   // Get unique symbols for charts
-  const uniqueSymbols = [...new Set(alerts.map(alert => ({ 
-    symbol: alert.symbol, 
-    marketType: alert.market_type 
+  const uniqueSymbols = [...new Set(alerts.map(alert => ({
+    symbol: alert.symbol,
+    marketType: alert.market_type
   })))].slice(0, 2); // Réduire à 2 pour mobile pour éviter le chevauchement
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      <Header 
-        userEmail={user?.email || ''} 
+      <Header
+        userEmail={user?.email || ''}
         onSignOut={onSignOut}
         onGoHome={onGoHome}
         onPremiumUpgrade={handlePremiumUpgrade}
