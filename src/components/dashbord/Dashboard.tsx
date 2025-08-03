@@ -8,6 +8,7 @@ import { MarketOverview } from './MarketOverview';
 import { UserSettings } from './UserSettings';
 import { TechnicalAnalysis } from './TechnicalAnalysis';
 import { SocialTrading } from './SocialTrading';
+// La ligne d'importation a été corrigée pour utiliser l'exportation par défaut.
 import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
@@ -327,4 +328,3 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     </div>
   );
 }
-
