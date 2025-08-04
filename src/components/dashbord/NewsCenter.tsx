@@ -1,58 +1,46 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Newspaper, ExternalLink, Clock, TrendingUp, Filter, Search, Crown, Zap, RefreshCw } from 'lucide-react';
-import { finnhubService } from '../../services/finnhubService';
+import { Newspaper, ExternalLink, Clock, RefreshCw, Crown, Search } from 'lucide-react';
 
-// Création des composants de base pour rendre le fichier autonome
-// Fonction utilitaire de remplacement pour 'clsx' ou 'classnames'
+// Ce composant appelle simplement le serveur API.
+// La logique de cache est maintenant côté serveur, comme vous le souhaitiez.
+
+// Composants de base
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
 
-const Card = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      'rounded-xl border bg-card text-card-foreground shadow',
-      className
-    )}
-    {...props}
-  />
-));
+const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn('rounded-xl border bg-card text-card-foreground shadow', className)}
+      {...props}
+    />
+  )
+);
 Card.displayName = 'Card';
 
-const CardHeader = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn('flex flex-col space-y-1.5 p-6', className)}
-    {...props}
-  />
-));
+const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />
+  )
+);
 CardHeader.displayName = 'CardHeader';
 
-const CardContent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
-));
+const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
+  )
+);
 CardContent.displayName = 'CardContent';
 
-const Button = React.forwardRef<
-  HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    variant?: 'primary' | 'secondary' | 'ghost' | 'default';
-    size?: 'sm' | 'default' | 'lg' | 'icon';
-    loading?: boolean;
-  }
->(({ className, variant = 'default', size = 'default', loading, ...props }, ref) => {
+const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'default';
+  size?: 'sm' | 'default' | 'lg' | 'icon';
+  loading?: boolean;
+}>(({ className, variant = 'default', size = 'default', loading, ...props }, ref) => {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none data-[state=open]:bg-accent';
-  
+
   const variantClasses = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700',
     secondary: 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600',
@@ -80,24 +68,24 @@ const Button = React.forwardRef<
 });
 Button.displayName = 'Button';
 
-const Input = React.forwardRef<
-  HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement>
->(({ className, type, ...props }, ref) => {
-  return (
-    <input
-      type={type}
-      className={cn(
-        'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-        className
-      )}
-      ref={ref}
-      {...props}
-    />
-  );
-});
+const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
 Input.displayName = 'Input';
 
+// Interfaces pour le typage
 interface NewsItem {
   id: string;
   title: string;
@@ -110,18 +98,6 @@ interface NewsItem {
   impact: 'high' | 'medium' | 'low';
 }
 
-interface FinnhubNewsItem {
-  category: 'general' | 'forex' | 'crypto' | 'merger' | 'stock';
-  datetime: number;
-  headline: string;
-  id: number;
-  image: string;
-  related: string;
-  source: string;
-  summary: string;
-  url: string;
-}
-
 interface NewsCenterProps {
   onPremiumUpgrade?: () => void;
 }
@@ -129,24 +105,18 @@ interface NewsCenterProps {
 function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'crypto' | 'stock' | 'general'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isFreePlan] = useState(true);
   
-  // Fonctions utilitaires pour dériver le sentiment et l'impact du titre
   const getSentiment = useCallback((title: string): 'positive' | 'negative' | 'neutral' => {
     const positiveWords = ['hausse', 'record', 'dépasse', 'succès', 'croissance', 'positif', 'gain', 'rally', 'bullish', 'dévoile', 'lance', 'augmente'];
     const negativeWords = ['baisse', 'chute', 'perte', 'échec', 'inquiétude', 'risque', 'bearish', 'crash', 'réduit', 'diminue', 'recule'];
-    
     const lowerTitle = title.toLowerCase();
     
-    if (positiveWords.some(word => lowerTitle.includes(word))) {
-      return 'positive';
-    }
-    
-    if (negativeWords.some(word => lowerTitle.includes(word))) {
-      return 'negative';
-    }
+    if (positiveWords.some(word => lowerTitle.includes(word))) return 'positive';
+    if (negativeWords.some(word => lowerTitle.includes(word))) return 'negative';
     
     return 'neutral';
   }, []);
@@ -154,68 +124,47 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const getImpact = useCallback((title: string): 'high' | 'medium' | 'low' => {
     const highImpactWords = ['record', 'historique', 'majeur', 'milliard', 'révolution', 'rupture', 'BCE', 'Fed', 'inflation'];
     const mediumImpactWords = ['important', 'significatif', 'million', 'croissance', 'investissement', 'baisse', 'hausse'];
-    
     const lowerTitle = title.toLowerCase();
     
-    if (highImpactWords.some(word => lowerTitle.includes(word))) {
-      return 'high';
-    }
-    
-    if (mediumImpactWords.some(word => lowerTitle.includes(word))) {
-      return 'medium';
-    }
+    if (highImpactWords.some(word => lowerTitle.includes(word))) return 'high';
+    if (mediumImpactWords.some(word => lowerTitle.includes(word))) return 'medium';
     
     return 'low';
   }, []);
 
-  // Fonction pour formater les actualités de Finnhub
-  const formatNews = useCallback((rawNews: FinnhubNewsItem[]): NewsItem[] => {
-    return rawNews.map(item => ({
-      id: item.id.toString(),
-      title: item.headline,
-      summary: item.summary,
-      source: item.source,
-      publishedAt: new Date(item.datetime * 1000).toISOString(),
-      url: item.url,
-      category: item.category as 'crypto' | 'stock' | 'general', // On se base sur la catégorie de l'API
-      sentiment: getSentiment(item.headline),
-      impact: getImpact(item.headline),
-    }));
-  }, [getSentiment, getImpact]);
-
-  // Fonction de récupération des actualités
-  const fetchNews = useCallback(async () => {
+  const fetchNewsFromApi = useCallback(async () => {
+    setIsUpdating(true);
     setLoading(true);
-    
+
     try {
-      // Appel de l'API Finnhub via le service
-      const rawNews = await finnhubService.getMarketNews('general');
-      const formattedNews = formatNews(rawNews);
+      const response = await fetch('/api/news'); 
+      const data = await response.json();
       
-      // Trier par date de publication (plus récentes en premier)
-      formattedNews.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch news from serverless API');
+      }
       
-      setNews(formattedNews);
+      // On enrichit les données avec le sentiment et l'impact côté client
+      const enrichedNews = data.map((item: any) => ({
+        ...item,
+        sentiment: getSentiment(item.title),
+        impact: getImpact(item.title)
+      }));
+
+      setNews(enrichedNews);
+      console.log("Actualités récupérées depuis l'API Vercel.");
     } catch (error) {
-      console.error('Erreur lors de la récupération des actualités:', error);
-      setNews([]); // En cas d'échec, vider les actualités
+      console.error('Erreur lors de la récupération des actualités :', error);
     } finally {
+      setIsUpdating(false);
       setLoading(false);
     }
-  }, [formatNews]);
+  }, [getSentiment, getImpact]);
 
   useEffect(() => {
-    // Appel initial des actualités
-    fetchNews();
-    
-    // Rafraîchir les actualités toutes les 30 secondes
-    const intervalId = setInterval(fetchNews, 30 * 1000);
-    
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [fetchNews]);
-
+    fetchNewsFromApi();
+  }, [fetchNewsFromApi]);
+  
   const filteredNews = news.filter(item => {
     const matchesCategory = selectedCategory === 'all' || item.category.toLowerCase() === selectedCategory;
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -223,7 +172,6 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     return matchesCategory && matchesSearch;
   });
 
-  // Limiter les actualités pour la version gratuite
   const limitedNews = isFreePlan ? filteredNews.slice(0, 5) : filteredNews;
 
   const formatTimeAgo = (dateString: string) => {
@@ -248,24 +196,18 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const getImpactBadge = (impact: string) => {
     const baseClasses = 'px-2 py-1 rounded-full text-xs font-medium';
     switch (impact) {
-      case 'high':
-        return `${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300`;
-      case 'medium':
-        return `${baseClasses} bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300`;
-      default:
-        return `${baseClasses} bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300`;
+      case 'high': return `${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300`;
+      case 'medium': return `${baseClasses} bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300`;
+      default: return `${baseClasses} bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300`;
     }
   };
 
   const handleUpgradeClick = () => {
-    if (onPremiumUpgrade) {
-      onPremiumUpgrade();
-    }
+    if (onPremiumUpgrade) onPremiumUpgrade();
   };
 
   return (
     <div className="space-y-4">
-      {/* Header - Compact pour mobile */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -276,23 +218,22 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
                   Actualités
                 </h2>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Dernières 24h - Temps réel via Finnhub
+                  Temps réel via Cache Centralisé
                 </p>
               </div>
             </div>
             <Button
-              onClick={fetchNews}
+              onClick={fetchNewsFromApi}
               variant="ghost"
               size="sm"
               className="p-2"
-              loading={loading}
+              loading={isUpdating}
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isUpdating ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {/* Free Plan Limitation - Compact */}
           {isFreePlan && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
               <div className="flex items-center justify-between mb-2">
@@ -309,7 +250,6 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
             </div>
           )}
 
-          {/* Filters - Compact pour mobile */}
           <div className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -351,7 +291,6 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
         </CardContent>
       </Card>
 
-      {/* News List - Compact pour mobile */}
       {loading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
@@ -426,7 +365,6 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
         </div>
       )}
 
-      {/* Upgrade CTA - Compact */}
       {isFreePlan && filteredNews.length > 5 && (
         <Card>
           <CardContent className="p-4">
