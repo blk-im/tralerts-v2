@@ -1,49 +1,66 @@
-// api/news.js
-// Cette fonction serverless est dédiée à la récupération des actualités sur une entreprise.
+import { createClient } from '@supabase/supabase-js';
+import fetch from 'node-fetch'; 
 
-module.exports = async (req, res) => {
-    // Récupération de la clé API Finnhub depuis les variables d'environnement Vercel
-    const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
+// C'est la durée de vie du cache, ici 30 secondes.
+const CACHE_EXPIRATION_TIME = 30 * 1000; 
 
-    // Récupération du symbole boursier à partir des paramètres de la requête
-    // Exemple d'URL : /api/news?symbol=AAPL
-    const { symbol } = req.query;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const finnhubApiKey = process.env.FINNHUB_API_KEY;
 
-    // Vérification de la présence des paramètres requis
-    if (!FINNHUB_API_KEY || !symbol) {
-        return res.status(400).json({ error: "Missing required parameters: FINNHUB_API_KEY and/or symbol." });
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export default async function handler(req, res) {
+  try {
+    // 1. On essaie de lire les données dans la table de cache de Supabase
+    let { data: cachedData, error: readError } = await supabase
+      .from('news_cache')
+      .select('data, last_updated')
+      .eq('id', 1) 
+      .single();
+
+    if (readError && readError.code !== 'PGRST116') {
+        console.error('Erreur de lecture du cache Supabase :', readError);
     }
-
-    const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
     
-    // Pour les actualités d'entreprise, on peut spécifier une date de début et de fin.
-    // Ici, nous récupérons les actualités du dernier mois pour l'exemple.
-    const now = new Date();
-    const toDate = now.toISOString().split('T')[0];
-    const fromDate = new Date(now.setMonth(now.getMonth() - 1)).toISOString().split('T')[0];
+    // On vérifie si le cache est périmé
+    const isCacheStale = !cachedData || (Date.now() - new Date(cachedData.last_updated).getTime() > CACHE_EXPIRATION_TIME);
 
-    try {
-        const response = await fetch(
-            `${FINNHUB_BASE_URL}/company-news?symbol=${encodeURIComponent(symbol)}&from=${fromDate}&to=${toDate}&token=${FINNHUB_API_KEY}`
-        );
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[Serverless] Finnhub News API Error for ${symbol}: Status ${response.status}. Body:`, errorText);
-            throw new Error(`Finnhub API returned status ${response.status} for news on ${symbol}`);
-        }
-
-        const newsData = await response.json();
-
-        // Finnhub peut renvoyer un tableau vide si aucune actualité n'est trouvée.
-        if (!newsData || newsData.length === 0) {
-            console.warn(`[Serverless] Finnhub: No news found for ${symbol}.`);
-            return res.status(200).json([]);
-        }
-
-        res.status(200).json(newsData);
-    } catch (error) {
-        console.error(`[Serverless] Failed to fetch news for ${symbol}:`, error.message);
-        res.status(500).json({ error: 'Failed to fetch news data from Finnhub.' });
+    if (!isCacheStale) {
+      // 2. Si le cache est bon, on l'envoie à l'utilisateur
+      res.status(200).json(cachedData.data);
+      console.log("Données servies depuis le cache Supabase.");
+      return;
     }
-};
+
+    // 3. Si le cache est trop vieux, on fait UNE SEULE requête à Finnhub
+    console.log("Cache périmé, récupération des données depuis Finnhub...");
+    const response = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${finnhubApiKey}`);
+    const rawNews = await response.json();
+
+    const formattedNews = rawNews.map(item => ({
+      id: item.id.toString(),
+      title: item.headline,
+      summary: item.summary,
+      source: item.source,
+      publishedAt: new Date(item.datetime * 1000).toISOString(),
+      url: item.url,
+      category: item.category,
+    }));
+
+    // 4. On met à jour la table de cache avec les nouvelles données
+    const { error: writeError } = await supabase
+      .from('news_cache')
+      .upsert({ id: 1, data: formattedNews, last_updated: new Date().toISOString() }, { onConflict: 'id' });
+
+    if (writeError) {
+      console.error('Erreur de mise à jour du cache Supabase :', writeError);
+    }
+    
+    // 5. On envoie les nouvelles données à l'utilisateur
+    res.status(200).json(formattedNews);
+  } catch (error) {
+    console.error('Erreur dans la fonction Vercel :', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des actualités' });
+  }
+}
