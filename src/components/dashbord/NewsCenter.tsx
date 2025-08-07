@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Newspaper, ExternalLink, Clock, RefreshCw, Crown, Search } from 'lucide-react';
+import { Newspaper, ExternalLink, Clock, RefreshCw, Crown, Search, AlertCircle } from 'lucide-react';
 
-// Ce composant appelle simplement le serveur API.
-// La logique de cache est maintenant côté serveur, comme vous le souhaitiez.
-
-// Composants de base
+// Composants de base pour l'autonomie du fichier
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
@@ -40,7 +37,7 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
   loading?: boolean;
 }>(({ className, variant = 'default', size = 'default', loading, ...props }, ref) => {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none data-[state=open]:bg-accent';
-
+  
   const variantClasses = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700',
     secondary: 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600',
@@ -109,6 +106,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'crypto' | 'stock' | 'general'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isFreePlan] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const getSentiment = useCallback((title: string): 'positive' | 'negative' | 'neutral' => {
     const positiveWords = ['hausse', 'record', 'dépasse', 'succès', 'croissance', 'positif', 'gain', 'rally', 'bullish', 'dévoile', 'lance', 'augmente'];
@@ -135,13 +133,15 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
   const fetchNewsFromApi = useCallback(async () => {
     setIsUpdating(true);
     setLoading(true);
+    setError(null);
 
     try {
-      const response = await fetch('/api/news'); 
+      // Appel à la fonction Vercel au lieu de l'API Finnhub directement
+      const response = await fetch('/api/news');
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch news from serverless API');
+        throw new Error(data.error || 'Échec de la récupération des actualités depuis l\'API Vercel.');
       }
       
       // On enrichit les données avec le sentiment et l'impact côté client
@@ -152,9 +152,10 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
       }));
 
       setNews(enrichedNews);
-      console.log("Actualités récupérées depuis l'API Vercel.");
+      console.log("Actualités récupérées avec succès depuis l'API Vercel.");
     } catch (error) {
       console.error('Erreur lors de la récupération des actualités :', error);
+      setError('Impossible de charger les actualités. Veuillez réessayer plus tard.');
     } finally {
       setIsUpdating(false);
       setLoading(false);
@@ -218,7 +219,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
                   Actualités
                 </h2>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Temps réel via Cache Centralisé
+                  Temps réel via API Vercel
                 </p>
               </div>
             </div>
@@ -291,7 +292,19 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {error ? (
+        <Card>
+          <CardContent className="p-8 text-center bg-red-50 dark:bg-red-900/20">
+            <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-red-900 dark:text-red-100 mb-2">
+              Erreur
+            </h3>
+            <p className="text-sm text-red-700 dark:text-red-300">
+              {error}
+            </p>
+          </CardContent>
+        </Card>
+      ) : loading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="animate-pulse">
