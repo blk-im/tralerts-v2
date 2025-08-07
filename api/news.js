@@ -6,7 +6,7 @@ const CACHE_EXPIRATION_TIME = 30 * 1000;
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-const finnhubApiKey = process.env.FINNHUB_API_KEY;
+const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
