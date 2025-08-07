@@ -1,8 +1,8 @@
 // /api/news.js
-// Cette fonction récupère et met en cache les actualités de Finnhub et CoinDesk.
+// Cette fonction récupère et met en cache les actualités de Finnhub et CoinDesk, en les catégorisant.
 
 import { createClient } from '@supabase/supabase-js';
-import fetch from 'node-fetch'; // Utilisez `fetch` pour les appels API
+import fetch from 'node-fetch';
 
 // Configuration des clés d'API depuis les variables d'environnement Vercel
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -18,8 +18,7 @@ const NEWS_CACHE_KEY = 'news_cache';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
- * Récupère les actualités de Finnhub, les formate et ajoute la source.
- * En cas d'échec de l'API, retourne un tableau vide.
+ * Récupère les actualités de Finnhub, les formate et ajoute une catégorie.
  */
 const fetchFinnhubNews = async () => {
   console.log('Récupération des actualités depuis Finnhub...');
@@ -45,6 +44,7 @@ const fetchFinnhubNews = async () => {
       source: item.source,
       publishedAt: new Date(item.datetime * 1000).toISOString(),
       url: item.url,
+      // Ajout de la catégorie pour identifier la source
       category: 'stock'
     }));
   } catch (error) {
@@ -54,8 +54,7 @@ const fetchFinnhubNews = async () => {
 };
 
 /**
- * Récupère les actualités de CoinDesk, les formate et ajoute la source.
- * En cas d'échec de l'API, retourne un tableau vide.
+ * Récupère les actualités de CoinDesk, les formate et ajoute une catégorie.
  */
 const fetchCoinDeskNews = async () => {
   console.log('Récupération des actualités depuis CoinDesk...');
@@ -65,7 +64,6 @@ const fetchCoinDeskNews = async () => {
   }
 
   try {
-    // Note: L'API de CoinDesk nécessite une clé pour l'accès aux actualités.
     const coindeskUrl = `https://news.api.coindesk.com/v2/news/?api_key=${coinDeskApiKey}`;
     const coindeskResponse = await fetch(coindeskUrl);
 
@@ -75,7 +73,6 @@ const fetchCoinDeskNews = async () => {
     }
     
     const coindeskData = await coindeskResponse.json();
-    // On s'assure que les données de CoinDesk ont la même structure que Finnhub
     return coindeskData.articles.map(item => ({
       id: item.articleId,
       title: item.title,
@@ -83,6 +80,7 @@ const fetchCoinDeskNews = async () => {
       source: 'CoinDesk',
       publishedAt: new Date(item.publishedAt).toISOString(),
       url: item.url,
+      // Ajout de la catégorie pour identifier la source
       category: 'crypto'
     }));
   } catch (error) {
@@ -101,7 +99,6 @@ export default async function handler(req, res) {
 
   // 1. On essaie de lire les données du cache dans Supabase
   try {
-    // Utilisation d'une table "kv" (key-value) avec la clé 'news_cache'
     const { data: cacheData } = await supabase
       .from('kv')
       .select('value')
@@ -114,7 +111,6 @@ export default async function handler(req, res) {
       const now = new Date();
       const timeElapsed = (now.getTime() - lastUpdated.getTime()) / 1000;
 
-      // Si le cache est encore valide, on le renvoie
       if (timeElapsed < CACHE_DURATION_SECONDS) {
         console.log('Cache hit. Utilisation des données du cache.');
         return res.status(200).json(cacheValue.news);
@@ -126,13 +122,11 @@ export default async function handler(req, res) {
 
   // 2. Si le cache est périmé, on récupère de nouvelles actualités de toutes les sources
   try {
-    // Exécution des appels API en parallèle pour optimiser la performance
     const [finnhubNews, coinDeskNews] = await Promise.all([
       fetchFinnhubNews(),
       fetchCoinDeskNews()
     ]);
 
-    // On fusionne les actualités et on les trie par date de publication (récent en premier)
     const allNews = [...finnhubNews, ...coinDeskNews].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
 
     // 3. On met à jour le cache dans Supabase
