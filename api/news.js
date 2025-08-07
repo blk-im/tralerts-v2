@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
     // 3. Si le cache est trop vieux, on fait UNE SEULE requête à Finnhub
     console.log("Cache périmé, récupération des données depuis Finnhub...");
-    const response = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${finnhubApiKey}`);
+    const response = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${finnhubNewsApiKey}`);
     const rawNews = await response.json();
 
     const formattedNews = rawNews.map(item => ({
