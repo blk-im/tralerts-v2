@@ -1,75 +1,66 @@
-// api/news.js - Fonction Vercel pour le cache des actualités
 import { createClient } from '@supabase/supabase-js';
-import fetch from 'node-fetch';
+import fetch from 'node-fetch'; 
 
-// Le cache expire après 1 heure pour les actualités.
-// Les actualités ne nécessitent pas un rafraîchissement aussi fréquent que les prix.
-const CACHE_EXPIRATION_TIME = 60 * 60 * 1000; // 1 heure
+// C'est la durée de vie du cache, ici 30 secondes.
+const CACHE_EXPIRATION_TIME = 30 * 1000; 
 
-// On récupère les variables d'environnement de Vercel.
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-// On utilise la clé API spécifique pour les actualités.
-const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY; 
+const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default async function handler(req, res) {
-  const { category = 'general' } = req.query; 
-
-  // Vérification de la présence de la clé API.
-  if (!finnhubNewsApiKey) {
-    console.error('FINNHUB_NEWS_API_KEY est manquante dans les variables d\'environnement Vercel.');
-    return res.status(500).json({ error: 'Clé API Finnhub pour les actualités manquante.' });
-  }
-
   try {
-    // 1. Tente de lire les données du cache depuis Supabase.
+    // 1. On essaie de lire les données dans la table de cache de Supabase
     let { data: cachedData, error: readError } = await supabase
-      .from('news') // Assurez-vous que cette table existe
+      .from('news_cache')
       .select('data, last_updated')
-      .eq('category', category)
+      .eq('id', 1) 
       .single();
 
-    // 2. Si le cache est valide, on le renvoie.
-    if (!readError && cachedData && (Date.now() - new Date(cachedData.last_updated).getTime() < CACHE_EXPIRATION_TIME)) {
-      console.log(`Actualités pour la catégorie ${category} servies depuis le cache.`);
-      res.status(200).json(cachedData.data);
-      return;
+    if (readError && readError.code !== 'PGRST116') {
+        console.error('Erreur de lecture du cache Supabase :', readError);
     }
-
-    // 3. Le cache est périmé, on fait une requête à Finnhub.
-    console.log(`Cache périmé pour la catégorie ${category}, récupération depuis Finnhub...`);
-    const response = await fetch(`https://finnhub.io/api/v1/news?category=${category}&token=${finnhubNewsApiKey}`);
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Erreur Finnhub API pour les actualités: Status ${response.status}. Body:`, errorText);
-        throw new Error(`Finnhub API returned status ${response.status}`);
-    }
-
-    const newsData = await response.json();
     
-    if (!newsData || newsData.length === 0) { 
-      console.warn(`Aucune actualité trouvée pour la catégorie: ${category}`);
-      res.status(404).json({ error: 'Actualités non trouvées ou données indisponibles' });
+    // On vérifie si le cache est périmé
+    const isCacheStale = !cachedData || (Date.now() - new Date(cachedData.last_updated).getTime() > CACHE_EXPIRATION_TIME);
+
+    if (!isCacheStale) {
+      // 2. Si le cache est bon, on l'envoie à l'utilisateur
+      res.status(200).json(cachedData.data);
+      console.log("Données servies depuis le cache Supabase.");
       return;
     }
 
-    // 4. Mettre à jour le cache Supabase avec les nouvelles données.
+    // 3. Si le cache est trop vieux, on fait UNE SEULE requête à Finnhub
+    console.log("Cache périmé, récupération des données depuis Finnhub...");
+    const response = await fetch(`https://finnhub.io/api/v1/news?category=general&token=${finnhubApiKey}`);
+    const rawNews = await response.json();
+
+    const formattedNews = rawNews.map(item => ({
+      id: item.id.toString(),
+      title: item.headline,
+      summary: item.summary,
+      source: item.source,
+      publishedAt: new Date(item.datetime * 1000).toISOString(),
+      url: item.url,
+      category: item.category,
+    }));
+
+    // 4. On met à jour la table de cache avec les nouvelles données
     const { error: writeError } = await supabase
-      .from('news')
-      .upsert({ category: category, data: newsData, last_updated: new Date().toISOString() }, { onConflict: 'category' });
+      .from('news_cache')
+      .upsert({ id: 1, data: formattedNews, last_updated: new Date().toISOString() }, { onConflict: 'id' });
 
     if (writeError) {
-      console.error('Erreur de mise à jour du cache Supabase pour les actualités:', writeError);
+      console.error('Erreur de mise à jour du cache Supabase :', writeError);
     }
-
-    // 5. Renvoyer les nouvelles données à l'utilisateur.
-    res.status(200).json(newsData);
+    
+    // 5. On envoie les nouvelles données à l'utilisateur
+    res.status(200).json(formattedNews);
   } catch (error) {
-    console.error('Erreur dans la fonction Vercel pour les actualités :', error.message);
+    console.error('Erreur dans la fonction Vercel :', error);
     res.status(500).json({ error: 'Erreur lors de la récupération des actualités' });
   }
 }
-
