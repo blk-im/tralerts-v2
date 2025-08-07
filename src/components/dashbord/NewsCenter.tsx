@@ -2,40 +2,30 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Newspaper, ExternalLink, Clock, RefreshCw, Crown, Search, AlertCircle } from 'lucide-react';
 
 // Composants de base pour l'autonomie du fichier
-function cn(...inputs: any[]) {
+function cn(...inputs) {
   return inputs.filter(Boolean).join(' ');
 }
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn('rounded-xl border bg-card text-card-foreground shadow', className)}
-      {...props}
-    />
-  )
-);
+const Card = React.forwardRef(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn('rounded-xl border bg-card text-card-foreground shadow', className)}
+    {...props}
+  />
+));
 Card.displayName = 'Card';
 
-const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />
-  )
-);
+const CardHeader = React.forwardRef(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />
+));
 CardHeader.displayName = 'CardHeader';
 
-const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
-  )
-);
+const CardContent = React.forwardRef(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
+));
 CardContent.displayName = 'CardContent';
 
-const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'default';
-  size?: 'sm' | 'default' | 'lg' | 'icon';
-  loading?: boolean;
-}>(({ className, variant = 'default', size = 'default', loading, ...props }, ref) => {
+const Button = React.forwardRef(({ className, variant = 'default', size = 'default', loading, ...props }, ref) => {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none data-[state=open]:bg-accent';
   
   const variantClasses = {
@@ -65,50 +55,54 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
 });
 Button.displayName = 'Button';
 
-const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    );
-  }
-);
+const Input = React.forwardRef(({ className, type, ...props }, ref) => {
+  return (
+    <input
+      type={type}
+      className={cn(
+        'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  );
+});
 Input.displayName = 'Input';
 
 // Interfaces pour le typage
-interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  source: string;
-  publishedAt: string;
-  url: string;
-  category: 'crypto' | 'stock' | 'general';
-  sentiment: 'positive' | 'negative' | 'neutral';
-  impact: 'high' | 'medium' | 'low';
-}
+/**
+ * @typedef {object} NewsItem
+ * @property {string} id
+ * @property {string} title
+ * @property {string} summary
+ * @property {string} source
+ * @property {string} publishedAt
+ * @property {string} url
+ * @property {'crypto' | 'stock' | 'general'} category
+ * @property {'positive' | 'negative' | 'neutral'} sentiment
+ * @property {'high' | 'medium' | 'low'} impact
+ */
 
-interface NewsCenterProps {
-  onPremiumUpgrade?: () => void;
-}
+/**
+ * @typedef {object} NewsCenterProps
+ * @property {() => void} [onPremiumUpgrade]
+ */
 
-function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
-  const [news, setNews] = useState<NewsItem[]>([]);
+/**
+ * @param {NewsCenterProps} props
+ */
+function NewsCenter({ onPremiumUpgrade }) {
+  /** @type {[NewsItem[], React.Dispatch<React.SetStateAction<NewsItem[]>>]} */
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'crypto' | 'stock' | 'general'>('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isFreePlan] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const getSentiment = useCallback((title: string): 'positive' | 'negative' | 'neutral' => {
+  const [error, setError] = useState(null);
+
+  const getSentiment = useCallback((title) => {
     const positiveWords = ['hausse', 'record', 'dépasse', 'succès', 'croissance', 'positif', 'gain', 'rally', 'bullish', 'dévoile', 'lance', 'augmente'];
     const negativeWords = ['baisse', 'chute', 'perte', 'échec', 'inquiétude', 'risque', 'bearish', 'crash', 'réduit', 'diminue', 'recule'];
     const lowerTitle = title.toLowerCase();
@@ -119,7 +113,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     return 'neutral';
   }, []);
 
-  const getImpact = useCallback((title: string): 'high' | 'medium' | 'low' => {
+  const getImpact = useCallback((title) => {
     const highImpactWords = ['record', 'historique', 'majeur', 'milliard', 'révolution', 'rupture', 'BCE', 'Fed', 'inflation'];
     const mediumImpactWords = ['important', 'significatif', 'million', 'croissance', 'investissement', 'baisse', 'hausse'];
     const lowerTitle = title.toLowerCase();
@@ -145,7 +139,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
       }
       
       // On enrichit les données avec le sentiment et l'impact côté client
-      const enrichedNews = data.map((item: any) => ({
+      const enrichedNews = data.map((item) => ({
         ...item,
         sentiment: getSentiment(item.title),
         impact: getImpact(item.title)
@@ -162,8 +156,19 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     }
   }, [getSentiment, getImpact]);
 
+  // Nouveau hook useEffect pour le rafraîchissement automatique
   useEffect(() => {
+    // Appelle la fonction une première fois immédiatement
     fetchNewsFromApi();
+    
+    // Puis, configure un intervalle pour l'appeler toutes les 30 secondes
+    const intervalId = setInterval(() => {
+      fetchNewsFromApi();
+    }, 30000); // 30000 ms = 30 secondes
+
+    // Fonction de nettoyage : s'assure que le timer est arrêté lorsque le composant
+    // n'est plus affiché. C'est essentiel pour éviter les fuites de mémoire.
+    return () => clearInterval(intervalId);
   }, [fetchNewsFromApi]);
   
   const filteredNews = news.filter(item => {
@@ -175,7 +180,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
 
   const limitedNews = isFreePlan ? filteredNews.slice(0, 5) : filteredNews;
 
-  const formatTimeAgo = (dateString: string) => {
+  const formatTimeAgo = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
@@ -186,7 +191,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     return `Il y a ${Math.floor(diffInHours / 24)} jour(s)`;
   };
 
-  const getSentimentColor = (sentiment: string) => {
+  const getSentimentColor = (sentiment) => {
     switch (sentiment) {
       case 'positive': return 'text-green-600 dark:text-green-400';
       case 'negative': return 'text-red-600 dark:text-red-400';
@@ -194,7 +199,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
     }
   };
 
-  const getImpactBadge = (impact: string) => {
+  const getImpactBadge = (impact) => {
     const baseClasses = 'px-2 py-1 rounded-full text-xs font-medium';
     switch (impact) {
       case 'high': return `${baseClasses} bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300`;
@@ -219,7 +224,7 @@ function NewsCenter({ onPremiumUpgrade }: NewsCenterProps) {
                   Actualités
                 </h2>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Temps réel via API Vercel
+                  Rafraîchissement automatique toutes les 30s
                 </p>
               </div>
             </div>
