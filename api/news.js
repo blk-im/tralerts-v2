@@ -84,7 +84,7 @@ const getCoinDeskNews = async () => {
       }
     }
   } catch (error) {
-    // Ne pas arrêter l'exécution en cas d'erreur du cache
+    // L'erreur PGRST116 (ligne non trouvée) est normale si le cache n'existe pas encore.
     if (error.code !== 'PGRST116') {
       console.error('Erreur lors de la vérification du cache de CoinDesk:', error);
     }
@@ -92,15 +92,11 @@ const getCoinDeskNews = async () => {
 
   // 2. Si le cache est périmé, on fait un nouvel appel à l'API
   console.log('Cache de CoinDesk périmé ou inexistant. Récupération des actualités...');
-  console.log('Clé API CoinDesk disponible:', !!coinDeskApiKey);
-  if (!coinDeskApiKey) {
-    console.error("Clé API CoinDesk manquante. Impossible de récupérer les actualités.");
-    return [];
-  }
-
+  
+  // Correction: L'API publique de CoinDesk n'a pas besoin de clé API.
+  // La variable d'environnement coinDeskApiKey est ignorée pour cette requête.
   try {
-    // CORRECTION : L'URL de l'API de CoinDesk a été mise à jour
-    const coindeskUrl = `https://api.coindesk.com/v2/news/?api_key=${coinDeskApiKey}`;
+    const coindeskUrl = `https://api.coindesk.com/v2/news/`;
     console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
     const coindeskResponse = await fetch(coindeskUrl);
     console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
@@ -111,12 +107,12 @@ const getCoinDeskNews = async () => {
     }
 
     const coindeskData = await coindeskResponse.json();
-    const formattedNews = coindeskData.articles.map(item => ({
-      id: item.articleId,
+    const formattedNews = coindeskData.data.map(item => ({ // Changement ici: la structure de la réponse est 'data' et non 'articles'
+      id: item.id,
       title: item.title,
-      summary: item.summary,
+      summary: item.content,
       source: 'CoinDesk',
-      publishedAt: new Date(item.publishedAt).toISOString(),
+      publishedAt: new Date(item.created_at).toISOString(),
       url: item.url,
       category: 'crypto'
     }));
@@ -186,7 +182,7 @@ export default async function handler(req, res) {
   try {
     const [finnhubNews, coinDeskNews] = await Promise.all([
       fetchFinnhubNews(),
-      getCoinDeskNews() // Cette fonction gère son propre cache
+      getCoinDeskNews()
     ]);
 
     // On combine et on trie les résultats par date de publication
