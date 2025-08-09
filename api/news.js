@@ -99,7 +99,9 @@ const getCoinDeskNews = async () => {
   }
 
   try {
-    const coindeskUrl = `https://news.api.coindesk.com/v2/news/?api_key=${coinDeskApiKey}`;
+    // CORRECTION : L'URL de l'API de CoinDesk a été mise à jour
+    const coindeskUrl = `https://api.coindesk.com/v2/news/?api_key=${coinDeskApiKey}`;
+    console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
     const coindeskResponse = await fetch(coindeskUrl);
     console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
 
@@ -109,7 +111,6 @@ const getCoinDeskNews = async () => {
     }
 
     const coindeskData = await coindeskResponse.json();
-    console.log('Données brutes de CoinDesk reçues:', JSON.stringify(coindeskData).substring(0, 200) + '...');
     const formattedNews = coindeskData.articles.map(item => ({
       id: item.articleId,
       title: item.title,
@@ -131,7 +132,7 @@ const getCoinDeskNews = async () => {
       .upsert({ key: COINDESK_CACHE_KEY, value: newCacheValue }, { onConflict: 'key' });
 
     if (updateError) {
-      console.error('Erreur lors de la mise à jour du cache de CoinDesk:', updateError);
+      console.error('Erreur lors de la mise à jour du cache de CoinDesk:', JSON.stringify(updateError));
     } else {
       console.log('Cache de CoinDesk mis à jour.');
     }
@@ -166,7 +167,7 @@ export default async function handler(req, res) {
   } catch (error) {
     // L'erreur PGRST116 (ligne non trouvée) est normale si le cache n'existe pas encore.
     if (error.code !== 'PGRST116') {
-      console.error('Erreur lors de la vérification du cache global:', error);
+      console.error('Erreur lors de la vérification du cache global:', JSON.stringify(error));
     }
   }
 
@@ -202,7 +203,7 @@ export default async function handler(req, res) {
       .upsert({ key: NEWS_CACHE_KEY, value: newCacheValue }, { onConflict: 'key' });
 
     if (updateError) {
-      console.error('Erreur lors de la mise à jour du cache global:', updateError);
+      console.error('Erreur lors de la mise à jour du cache global:', JSON.stringify(updateError));
     } else {
       console.log('Cache global mis à jour avec succès.');
     }
