@@ -1,6 +1,6 @@
 // /api/news.js
 // Cette fonction gère la récupération et le cache des actualités de Finnhub et CoinDesk
-// avec des durées de cache différentes pour respecter les limites d'API.
+// avec des durées de cache différentes et un flux CoinDesk alternatif.
 
 import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
@@ -9,7 +9,6 @@ import fetch from 'node-fetch';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
-const coinDeskApiKey = process.env.COINDESK_API_KEY;
 
 // Durées de cache spécifiques
 const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global (Finnhub)
@@ -21,6 +20,29 @@ const COINDESK_CACHE_KEY = 'coindesk_news_cache'; // Clé pour le cache de CoinD
 
 // Initialisation du client Supabase
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+/**
+ * Fonction utilitaire pour fetch avec un mécanisme de réessai et un délai exponentiel.
+ * @param {string} url - L'URL à appeler.
+ * @param {Object} [options={}] - Options pour la requête fetch.
+ * @param {number} [retries=3] - Nombre maximum de réessais.
+ * @returns {Promise<Response>}
+ */
+const fetchWithRetry = async (url, options = {}, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        return response;
+      }
+    } catch (error) {
+      console.warn(`Erreur de fetch pour ${url}. Tentative de réessai ${i + 1}/${retries}...`, error.message);
+      // Délai exponentiel: 1s, 2s, 4s...
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+    }
+  }
+  throw new Error(`Échec de la récupération de ${url} après ${retries} tentatives.`);
+};
 
 /**
  * Récupère les actualités de Finnhub, les formate et ajoute une catégorie.
@@ -35,12 +57,7 @@ const fetchFinnhubNews = async () => {
 
   try {
     const finnhubUrl = `https://finnhub.io/api/v1/news?category=general&token=${finnhubNewsApiKey}`;
-    const finnhubResponse = await fetch(finnhubUrl);
-
-    if (!finnhubResponse.ok) {
-      console.error(`Erreur de l'API Finnhub: ${finnhubResponse.status} - ${finnhubResponse.statusText}`);
-      return [];
-    }
+    const finnhubResponse = await fetchWithRetry(finnhubUrl);
 
     const rawNews = await finnhubResponse.json();
     console.log(`Finnhub : ${rawNews.length} articles récupérés.`);
@@ -61,6 +78,7 @@ const fetchFinnhubNews = async () => {
 
 /**
  * Récupère les actualités de CoinDesk en utilisant un cache spécifique de 4 minutes.
+ * Utilise un flux de données public au lieu de l'API v2.
  * @returns {Promise<Array<Object>>}
  */
 const getCoinDeskNews = async () => {
@@ -84,36 +102,35 @@ const getCoinDeskNews = async () => {
       }
     }
   } catch (error) {
-    // L'erreur PGRST116 (ligne non trouvée) est normale si le cache n'existe pas encore.
     if (error.code !== 'PGRST116') {
       console.error('Erreur lors de la vérification du cache de CoinDesk:', error);
     }
   }
 
-  // 2. Si le cache est périmé, on fait un nouvel appel à l'API
+  // 2. Si le cache est périmé, on fait un nouvel appel au flux de données
   console.log('Cache de CoinDesk périmé ou inexistant. Récupération des actualités...');
-  
-  // Correction: L'API publique de CoinDesk n'a pas besoin de clé API.
-  // La variable d'environnement coinDeskApiKey est ignorée pour cette requête.
+
   try {
-    const coindeskUrl = `https://api.coindesk.com/v2/news/`;
-    console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
-    const coindeskResponse = await fetch(coindeskUrl);
+    // Utilisation d'un flux de données public alternatif de CoinDesk
+    const coindeskUrl = `https://www.coindesk.com/arc/outboundfeeds/feed.json`;
+    console.log(`Appel au flux CoinDesk à l'URL: ${coindeskUrl}`);
+    const coindeskResponse = await fetchWithRetry(coindeskUrl);
     console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
 
     if (!coindeskResponse.ok) {
-      console.error(`Erreur de l'API CoinDesk: ${coindeskResponse.status} - ${coindeskResponse.statusText}`);
+      console.error(`Erreur du flux CoinDesk: ${coindeskResponse.status} - ${coindeskResponse.statusText}`);
       return [];
     }
 
     const coindeskData = await coindeskResponse.json();
-    const formattedNews = coindeskData.data.map(item => ({ // Changement ici: la structure de la réponse est 'data' et non 'articles'
-      id: item.id,
-      title: item.title,
-      summary: item.content,
+    const formattedNews = coindeskData.headlines.map(item => ({
+      // La structure des données a changé, nous l'adaptons en conséquence
+      id: item.id.toString(),
+      title: item.headline,
+      summary: item.standfirst,
       source: 'CoinDesk',
-      publishedAt: new Date(item.created_at).toISOString(),
-      url: item.url,
+      publishedAt: new Date(item.last_updated_date).toISOString(),
+      url: item.canonical_url,
       category: 'crypto'
     }));
     console.log(`CoinDesk : ${formattedNews.length} articles formatés.`);
@@ -161,7 +178,6 @@ export default async function handler(req, res) {
       .single();
     cacheData = data;
   } catch (error) {
-    // L'erreur PGRST116 (ligne non trouvée) est normale si le cache n'existe pas encore.
     if (error.code !== 'PGRST116') {
       console.error('Erreur lors de la vérification du cache global:', JSON.stringify(error));
     }
