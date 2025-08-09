@@ -43,6 +43,7 @@ const fetchFinnhubNews = async () => {
     }
 
     const rawNews = await finnhubResponse.json();
+    console.log(`Finnhub : ${rawNews.length} articles récupérés.`);
     return rawNews.map(item => ({
       id: item.id.toString(),
       title: item.headline,
@@ -64,6 +65,7 @@ const fetchFinnhubNews = async () => {
  */
 const getCoinDeskNews = async () => {
   // 1. On essaie de lire le cache de CoinDesk
+  console.log('Vérification du cache CoinDesk...');
   try {
     const { data: coindeskCache } = await supabase
       .from('kv')
@@ -83,11 +85,14 @@ const getCoinDeskNews = async () => {
     }
   } catch (error) {
     // Ne pas arrêter l'exécution en cas d'erreur du cache
-    console.error('Erreur lors de la vérification du cache de CoinDesk:', error);
+    if (error.code !== 'PGRST116') {
+      console.error('Erreur lors de la vérification du cache de CoinDesk:', error);
+    }
   }
 
   // 2. Si le cache est périmé, on fait un nouvel appel à l'API
   console.log('Cache de CoinDesk périmé ou inexistant. Récupération des actualités...');
+  console.log('Clé API CoinDesk disponible:', !!coinDeskApiKey);
   if (!coinDeskApiKey) {
     console.error("Clé API CoinDesk manquante. Impossible de récupérer les actualités.");
     return [];
@@ -96,6 +101,7 @@ const getCoinDeskNews = async () => {
   try {
     const coindeskUrl = `https://news.api.coindesk.com/v2/news/?api_key=${coinDeskApiKey}`;
     const coindeskResponse = await fetch(coindeskUrl);
+    console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
 
     if (!coindeskResponse.ok) {
       console.error(`Erreur de l'API CoinDesk: ${coindeskResponse.status} - ${coindeskResponse.statusText}`);
@@ -103,6 +109,7 @@ const getCoinDeskNews = async () => {
     }
 
     const coindeskData = await coindeskResponse.json();
+    console.log('Données brutes de CoinDesk reçues:', JSON.stringify(coindeskData).substring(0, 200) + '...');
     const formattedNews = coindeskData.articles.map(item => ({
       id: item.articleId,
       title: item.title,
@@ -112,6 +119,7 @@ const getCoinDeskNews = async () => {
       url: item.url,
       category: 'crypto'
     }));
+    console.log(`CoinDesk : ${formattedNews.length} articles formatés.`);
 
     // 3. On met à jour le cache spécifique de CoinDesk
     const newCacheValue = {
@@ -199,6 +207,7 @@ export default async function handler(req, res) {
       console.log('Cache global mis à jour avec succès.');
     }
 
+    console.log(`Total des articles combinés : ${allNews.length}`);
     // 4. On renvoie les actualités combinées
     return res.status(200).json(allNews);
 
