@@ -116,17 +116,11 @@ const fetchCryptoNews = async () => {
   }
 
   try {
-    // Utilisation de l'URL de base et de l'endpoint corrects, SANS la clé d'API
-    const coindeskUrl = `https://data-api.coindesk.com/v2/news`;
-    // Création de l'en-tête d'autorisation
-    const options = {
-        headers: {
-            'Authorization': `Apikey ${coindeskApiKey}`
-        }
-    };
+    // Utilisation de l'URL de l'endpoint pour les actualités et de la clé d'API
+    const coindeskUrl = `https://data-api.coindesk.com/news/v2/articles?api_key=${coindeskApiKey}&lang=fr`;
     
-    console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl} avec en-tête d'autorisation.`);
-    const coindeskResponse = await fetchWithRetry(coindeskUrl, options);
+    console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
+    const coindeskResponse = await fetchWithRetry(coindeskUrl);
     console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
 
     if (!coindeskResponse.ok) {
