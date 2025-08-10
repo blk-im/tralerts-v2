@@ -116,7 +116,7 @@ const fetchCryptoNews = async () => {
   }
 
   try {
-    const coindeskUrl = `https://data-api.coindesk.com/news/v1/article/list?api_key=${coindeskApiKey}&lang=fr`;
+    const coindeskUrl = `https://data-api.coindesk.com/news/v1/article/list?api_key=${coindeskApiKey}`;
     
     console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
     const coindeskResponse = await fetchWithRetry(coindeskUrl);
