@@ -11,12 +11,12 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
 
 // Durées de cache spécifiques
-const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global (Finnhub)
-const COINDESK_CACHE_DURATION_SECONDS = 244; // 4 minutes et 4 secondes pour le cache de CoinDesk
+const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global (Finnhub + CoinDesk)
+const COINDESK_CACHE_DURATION_SECONDS = 244; // Cache de 4 minutes et 4 secondes pour CoinDesk
 
 // Clés de cache
-const NEWS_CACHE_KEY = 'news_cache'; // Clé pour le cache global (Finnhub + CoinDesk)
-const COINDESK_CACHE_KEY = 'coindesk_news_cache'; // Clé pour le cache de CoinDesk
+const NEWS_CACHE_KEY = 'news_cache';
+const COINDESK_CACHE_KEY = 'coindesk_news_cache';
 
 // Initialisation du client Supabase
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -78,7 +78,6 @@ const fetchFinnhubNews = async () => {
 
 /**
  * Récupère les actualités de CoinDesk en utilisant un cache spécifique de 4 minutes.
- * Utilise un flux de données public au lieu de l'API v2.
  * @returns {Promise<Array<Object>>}
  */
 const getCoinDeskNews = async () => {
@@ -111,7 +110,7 @@ const getCoinDeskNews = async () => {
   console.log('Cache de CoinDesk périmé ou inexistant. Récupération des actualités...');
 
   try {
-    // Utilisation d'un flux de données public alternatif de CoinDesk
+    // Utilisation du flux de données public de CoinDesk
     const coindeskUrl = `https://www.coindesk.com/arc/outboundfeeds/feed.json`;
     console.log(`Appel au flux CoinDesk à l'URL: ${coindeskUrl}`);
     const coindeskResponse = await fetchWithRetry(coindeskUrl);
@@ -124,7 +123,6 @@ const getCoinDeskNews = async () => {
 
     const coindeskData = await coindeskResponse.json();
     const formattedNews = coindeskData.headlines.map(item => ({
-      // La structure des données a changé, nous l'adaptons en conséquence
       id: item.id.toString(),
       title: item.headline,
       summary: item.standfirst,
