@@ -1,6 +1,6 @@
 // /api/news.js
-// Cette fonction gère la récupération et le cache des actualités de Finnhub et CoinGecko
-// avec des durées de cache différentes et un flux crypto alternatif.
+// Cette fonction gère la récupération et le cache des actualités de Finnhub et CoinDesk
+// avec des durées de cache différentes et l'API officielle de CoinDesk.
 
 import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
@@ -9,14 +9,15 @@ import fetch from 'node-fetch';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
+const coindeskApiKey = process.env.COINDESK_API_KEY; // Utilisation de votre nouvelle clé
 
 // Durées de cache spécifiques
-const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global (Finnhub + CoinGecko)
-const CRYPTO_CACHE_DURATION_SECONDS = 30; // Cache de 4 minutes et 4 secondes pour la crypto
+const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global
+const CRYPTO_CACHE_DURATION_SECONDS = 7; // Durée de cache de 7 secondes pour la crypto
 
 // Clés de cache
 const NEWS_CACHE_KEY = 'news_cache';
-const CRYPTO_NEWS_CACHE_KEY = 'crypto_news_cache'; // Nouvelle clé pour le cache crypto
+const CRYPTO_NEWS_CACHE_KEY = 'crypto_news_cache';
 
 // Initialisation du client Supabase
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -77,7 +78,7 @@ const fetchFinnhubNews = async () => {
 };
 
 /**
- * Récupère les actualités de CoinGecko en utilisant un cache spécifique.
+ * Récupère les actualités crypto via l'API officielle de CoinDesk en utilisant un cache spécifique.
  * @returns {Promise<Array<Object>>}
  */
 const fetchCryptoNews = async () => {
@@ -106,31 +107,37 @@ const fetchCryptoNews = async () => {
     }
   }
 
-  // 2. Si le cache est périmé, on fait un nouvel appel à l'API CoinGecko
+  // 2. Si le cache est périmé, on fait un nouvel appel à l'API CoinDesk
   console.log('Cache crypto périmé ou inexistant. Récupération des actualités...');
 
-  try {
-    const coingeckoUrl = `https://api.coingecko.com/api/v3/news`;
-    console.log(`Appel à l'API CoinGecko à l'URL: ${coingeckoUrl}`);
-    const coingeckoResponse = await fetchWithRetry(coingeckoUrl);
-    console.log(`Réponse CoinGecko - Statut: ${coingeckoResponse.status}`);
+  if (!coindeskApiKey) {
+    console.error("Clé API CoinDesk manquante. Impossible de récupérer les actualités crypto.");
+    return [];
+  }
 
-    if (!coingeckoResponse.ok) {
-      console.error(`Erreur de l'API CoinGecko: ${coingeckoResponse.status} - ${coingeckoResponse.statusText}`);
+  try {
+    // Utilisation d'un endpoint documenté de l'API officielle de CoinDesk
+    const coindeskUrl = `https://api.coindesk.com/api/v2/news?api_key=${coindeskApiKey}`;
+    console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
+    const coindeskResponse = await fetchWithRetry(coindeskUrl);
+    console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
+
+    if (!coindeskResponse.ok) {
+      console.error(`Erreur de l'API CoinDesk: ${coindeskResponse.status} - ${coindeskResponse.statusText}`);
       return [];
     }
 
-    const coingeckoData = await coingeckoResponse.json();
-    const formattedNews = coingeckoData.data.map(item => ({
-      id: item.url, // Utilisation de l'URL comme ID car CoinGecko n'a pas d'ID numérique
+    const coindeskData = await coindeskResponse.json();
+    const formattedNews = coindeskData.data.map(item => ({
+      id: item.id.toString(),
       title: item.title,
-      summary: item.author, // L'auteur est une bonne alternative pour un résumé court
-      source: item.news_site,
-      publishedAt: item.updated_at,
-      url: item.url,
+      summary: item.summary,
+      source: item.source_name,
+      publishedAt: item.published_at,
+      url: item.canonical_url,
       category: 'crypto'
     }));
-    console.log(`CoinGecko : ${formattedNews.length} articles formatés.`);
+    console.log(`CoinDesk : ${formattedNews.length} articles formatés.`);
 
     // 3. On met à jour le cache spécifique de la crypto
     const newCacheValue = {
