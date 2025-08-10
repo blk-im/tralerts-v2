@@ -1,6 +1,6 @@
 // /api/news.js
-// Cette fonction gère la récupération et le cache des actualités de Finnhub et CoinDesk
-// avec des durées de cache différentes et un flux CoinDesk alternatif.
+// Cette fonction gère la récupération et le cache des actualités de Finnhub et CoinGecko
+// avec des durées de cache différentes et un flux crypto alternatif.
 
 import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
@@ -11,12 +11,12 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
 
 // Durées de cache spécifiques
-const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global (Finnhub + CoinDesk)
-const COINDESK_CACHE_DURATION_SECONDS = 244; // Cache de 4 minutes et 4 secondes pour CoinDesk
+const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global (Finnhub + CoinGecko)
+const CRYPTO_CACHE_DURATION_SECONDS = 30; // Cache de 4 minutes et 4 secondes pour la crypto
 
 // Clés de cache
 const NEWS_CACHE_KEY = 'news_cache';
-const COINDESK_CACHE_KEY = 'coindesk_news_cache';
+const CRYPTO_NEWS_CACHE_KEY = 'crypto_news_cache'; // Nouvelle clé pour le cache crypto
 
 // Initialisation du client Supabase
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -77,81 +77,80 @@ const fetchFinnhubNews = async () => {
 };
 
 /**
- * Récupère les actualités de CoinDesk en utilisant un cache spécifique de 4 minutes.
+ * Récupère les actualités de CoinGecko en utilisant un cache spécifique.
  * @returns {Promise<Array<Object>>}
  */
-const getCoinDeskNews = async () => {
-  // 1. On essaie de lire le cache de CoinDesk
-  console.log('Vérification du cache CoinDesk...');
+const fetchCryptoNews = async () => {
+  // 1. On essaie de lire le cache des actualités crypto
+  console.log('Vérification du cache crypto...');
   try {
-    const { data: coindeskCache } = await supabase
+    const { data: cryptoCache } = await supabase
       .from('kv')
       .select('value')
-      .eq('key', COINDESK_CACHE_KEY)
+      .eq('key', CRYPTO_NEWS_CACHE_KEY)
       .single();
 
-    if (coindeskCache && coindeskCache.value) {
-      const { news, lastUpdated } = coindeskCache.value;
+    if (cryptoCache && cryptoCache.value) {
+      const { news, lastUpdated } = cryptoCache.value;
       const now = new Date();
       const timeElapsed = (now.getTime() - new Date(lastUpdated).getTime()) / 1000;
 
-      if (timeElapsed < COINDESK_CACHE_DURATION_SECONDS) {
-        console.log('Cache de CoinDesk valide. Réutilisation des données.');
+      if (timeElapsed < CRYPTO_CACHE_DURATION_SECONDS) {
+        console.log('Cache crypto valide. Réutilisation des données.');
         return news;
       }
     }
   } catch (error) {
     if (error.code !== 'PGRST116') {
-      console.error('Erreur lors de la vérification du cache de CoinDesk:', error);
+      console.error('Erreur lors de la vérification du cache crypto:', error);
     }
   }
 
-  // 2. Si le cache est périmé, on fait un nouvel appel au flux de données
-  console.log('Cache de CoinDesk périmé ou inexistant. Récupération des actualités...');
+  // 2. Si le cache est périmé, on fait un nouvel appel à l'API CoinGecko
+  console.log('Cache crypto périmé ou inexistant. Récupération des actualités...');
 
   try {
-    // Utilisation du flux de données public de CoinDesk
-    const coindeskUrl = `https://www.coindesk.com/arc/outboundfeeds/feed.json`;
-    console.log(`Appel au flux CoinDesk à l'URL: ${coindeskUrl}`);
-    const coindeskResponse = await fetchWithRetry(coindeskUrl);
-    console.log(`Réponse CoinDesk - Statut: ${coindeskResponse.status}`);
+    const coingeckoUrl = `https://api.coingecko.com/api/v3/news`;
+    console.log(`Appel à l'API CoinGecko à l'URL: ${coingeckoUrl}`);
+    const coingeckoResponse = await fetchWithRetry(coingeckoUrl);
+    console.log(`Réponse CoinGecko - Statut: ${coingeckoResponse.status}`);
 
-    if (!coindeskResponse.ok) {
-      console.error(`Erreur du flux CoinDesk: ${coindeskResponse.status} - ${coindeskResponse.statusText}`);
+    if (!coingeckoResponse.ok) {
+      console.error(`Erreur de l'API CoinGecko: ${coingeckoResponse.status} - ${coingeckoResponse.statusText}`);
       return [];
     }
 
-    const coindeskData = await coindeskResponse.json();
-    const formattedNews = coindeskData.headlines.map(item => ({
-      id: item.id.toString(),
-      title: item.headline,
-      summary: item.standfirst,
-      source: 'CoinDesk',
-      publishedAt: new Date(item.last_updated_date).toISOString(),
-      url: item.canonical_url,
+    const coingeckoData = await coingeckoResponse.json();
+    const formattedNews = coingeckoData.data.map(item => ({
+      id: item.url, // Utilisation de l'URL comme ID car CoinGecko n'a pas d'ID numérique
+      title: item.title,
+      summary: item.author, // L'auteur est une bonne alternative pour un résumé court
+      source: item.news_site,
+      publishedAt: item.updated_at,
+      url: item.url,
       category: 'crypto'
     }));
-    console.log(`CoinDesk : ${formattedNews.length} articles formatés.`);
+    console.log(`CoinGecko : ${formattedNews.length} articles formatés.`);
 
-    // 3. On met à jour le cache spécifique de CoinDesk
+    // 3. On met à jour le cache spécifique de la crypto
     const newCacheValue = {
       news: formattedNews,
       lastUpdated: new Date().toISOString()
     };
     const { error: updateError } = await supabase
       .from('kv')
-      .upsert({ key: COINDESK_CACHE_KEY, value: newCacheValue }, { onConflict: 'key' });
+      .upsert({ key: CRYPTO_NEWS_CACHE_KEY, value: newCacheValue }, { onConflict: 'key' });
 
     if (updateError) {
-      console.error('Erreur lors de la mise à jour du cache de CoinDesk:', JSON.stringify(updateError));
+      console.error('Erreur lors de la mise à jour du cache crypto:', JSON.stringify(updateError));
     } else {
-      console.log('Cache de CoinDesk mis à jour.');
+      console.log('Cache crypto mis à jour.');
     }
 
     return formattedNews;
 
   } catch (error) {
-    console.error('Erreur lors de la récupération des actualités CoinDesk:', error);
+    console.error('Erreur lors de la récupération des actualités crypto:', error);
     return [];
   }
 };
@@ -194,13 +193,13 @@ export default async function handler(req, res) {
 
   // 2. Si le cache global est périmé, on récupère les nouvelles actualités
   try {
-    const [finnhubNews, coinDeskNews] = await Promise.all([
+    const [finnhubNews, cryptoNews] = await Promise.all([
       fetchFinnhubNews(),
-      getCoinDeskNews()
+      fetchCryptoNews()
     ]);
 
     // On combine et on trie les résultats par date de publication
-    const allNews = [...finnhubNews, ...coinDeskNews].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    const allNews = [...finnhubNews, ...cryptoNews].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
 
     // 3. On met à jour le cache global avec le nouveau contenu
     const newCacheValue = {
