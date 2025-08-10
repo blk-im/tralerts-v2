@@ -129,7 +129,7 @@ const fetchCryptoNews = async () => {
     }
 
     const coindeskData = await coindeskResponse.json();
-    const formattedNews = coindeskData.data.items.map(item => ({
+    const formattedNews = coindeskData.data.map(item => ({
       id: item.ID.toString(),
       title: item.TITLE,
       summary: item.BODY,
