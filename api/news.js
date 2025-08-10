@@ -116,8 +116,8 @@ const fetchCryptoNews = async () => {
   }
 
   try {
-    // Utilisation de l'URL de l'endpoint pour les actualités et de la clé d'API
-    const coindeskUrl = `https://data-api.coindesk.com/news/v2/articles?api_key=${coindeskApiKey}&lang=fr`;
+    // Utilisation de l'URL de l'endpoint correct pour les actualités
+    const coindeskUrl = `https://data-api.coindesk.com/news/v1/article/list?api_key=${coindeskApiKey}&lang=fr`;
     
     console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
     const coindeskResponse = await fetchWithRetry(coindeskUrl);
@@ -130,12 +130,12 @@ const fetchCryptoNews = async () => {
 
     const coindeskData = await coindeskResponse.json();
     const formattedNews = coindeskData.data.map(item => ({
-      id: item.id.toString(),
-      title: item.title,
-      summary: item.summary,
-      source: item.source_name,
-      publishedAt: item.published_at,
-      url: item.canonical_url,
+      id: item.ID.toString(),
+      title: item.TITLE,
+      summary: item.BODY,
+      source: item.SOURCE_NAME,
+      publishedAt: new Date(item.PUBLISHED_ON * 1000).toISOString(),
+      url: item.URL,
       category: 'crypto'
     }));
     console.log(`CoinDesk : ${formattedNews.length} articles formatés.`);
