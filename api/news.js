@@ -9,11 +9,11 @@ import fetch from 'node-fetch';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const finnhubNewsApiKey = process.env.FINNHUB_NEWS_API_KEY;
-const coindeskApiKey = process.env.COINDESK_API_KEY; // Utilisation de votre nouvelle clé
+const coindeskApiKey = process.env.COINDESK_API_KEY;
 
 // Durées de cache spécifiques
 const CACHE_DURATION_SECONDS = 30; // 30 secondes pour le cache global
-const CRYPTO_CACHE_DURATION_SECONDS = 7; // Durée de cache de 7 secondes pour la crypto
+const CRYPTO_CACHE_DURATION_SECONDS = 244; // 244 secondes pour la crypto (CoinDesk)
 
 // Clés de cache
 const NEWS_CACHE_KEY = 'news_cache';
@@ -128,11 +128,16 @@ const fetchCryptoNews = async () => {
     }
 
     const coindeskData = await coindeskResponse.json();
-    const formattedNews = coindeskData.map(item => ({
+    
+    // CORRECTION: On accède à la clé 'Data' pour récupérer le tableau d'articles
+    const rawNews = coindeskData.Data || []; 
+
+    const formattedNews = rawNews.map(item => ({
       id: item.ID.toString(),
       title: item.TITLE,
       summary: item.BODY,
-      source: item.SOURCE_NAME,
+      // CORRECTION: On accède à SOURCE_DATA.NAME
+      source: item.SOURCE_DATA ? item.SOURCE_DATA.NAME : 'Inconnu', 
       publishedAt: new Date(item.PUBLISHED_ON * 1000).toISOString(),
       url: item.URL,
       category: 'crypto'
