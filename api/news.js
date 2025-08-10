@@ -116,8 +116,8 @@ const fetchCryptoNews = async () => {
   }
 
   try {
-    // Utilisation de l'URL de l'endpoint correct pour les actualités
-    const coindeskUrl = `https://data-api.coindesk.com/news/v2/articles?api_key=${coindeskApiKey}&lang=fr`;
+    // Suppression du paramètre de langue pour voir si l'API répond
+    const coindeskUrl = `https://data-api.coindesk.com/news/v2/articles?api_key=${coindeskApiKey}`;
     
     console.log(`Appel à l'API CoinDesk à l'URL: ${coindeskUrl}`);
     const coindeskResponse = await fetchWithRetry(coindeskUrl);
