@@ -3,12 +3,10 @@ import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown 
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import toast from 'react-hot-toast'; // Assurez-vous d'avoir toast installé et configuré
+import toast from 'react-hot-toast';
 
 // L'URL de votre fonction serverless Vercel
-// En développement local (si vous utilisez `vercel dev`), ce sera `/api/market-data`
-// En production/preview, Vercel gérera automatiquement le chemin.
-const BACKEND_API_URL = '/api/market-data'; 
+const BACKEND_API_URL = '/api/market-data';
 
 interface MarketItem {
   symbol: string;
@@ -31,42 +29,8 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'all' | 'crypto' | 'stock'>('all');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'gainers' | 'losers'>('all');
-  const [isFreePlan] = useState(true); // Conservez ceci pour la logique d'affichage du plan gratuit
+  const [isFreePlan] = useState(true);
 
-  // Noms pour cryptos et actions (ces listes sont toujours utiles pour l'affichage)
-  const getCryptoName = (symbol: string): string => {
-    const names: { [key: string]: string } = {
-      BTC: 'Bitcoin',
-      ETH: 'Ethereum',
-      SOL: 'Solana',
-      ADA: 'Cardano',
-      BNB: 'Binance Coin',
-      XRP: 'Ripple',
-      DOT: 'Polkadot',
-      DOGE: 'Dogecoin',
-      AVAX: 'Avalanche',
-      MATIC: 'Polygon',
-    };
-    return names[symbol] || symbol;
-  };
-
-  const getStockName = (symbol: string): string => {
-    const names: { [key: string]: string } = {
-      AAPL: 'Apple Inc.',
-      MSFT: 'Microsoft Corp.',
-      GOOGL: 'Alphabet Inc.',
-      AMZN: 'Amazon.com Inc.',
-      TSLA: 'Tesla Inc.',
-      NVDA: 'NVIDIA Corp.',
-      META: 'Meta Platforms',
-      JPM: 'JPMorgan Chase',
-      V: 'Visa Inc.',
-      WMT: 'Walmart Inc.',
-    };
-    return names[symbol] || symbol;
-  };
-
-  // Formatage devise et nombres grands
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -80,53 +44,37 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     if (value >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)}T`;
     if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-    return value.toLocaleString('en-US'); // Utiliser en-US pour les grands nombres sans devise
+    return value.toLocaleString('en-US');
   };
 
-  // Fonction de fetch des données de marché depuis votre fonction serverless Vercel
   const fetchMarketData = useCallback(async () => {
     setLoading(true);
     try {
-      // Appel à votre fonction serverless Vercel
-      const response = await fetch(BACKEND_API_URL); 
-      
+      // Appel à votre nouvelle fonction serverless Vercel
+      const response = await fetch(BACKEND_API_URL);
+
       if (!response.ok) {
         const errorData = await response.json();
         console.error(`Vercel API Function Error: Status ${response.status} - ${response.statusText}. Error:`, errorData.error);
         throw new Error(`Erreur de récupération des données depuis votre fonction Vercel: ${errorData.error || response.statusText}`);
       }
-      
+
       const data = await response.json();
-
-      // Les noms des cryptos et actions sont maintenant gérés par le backend,
-      // mais nous les gardons ici pour la fonction `getCryptoName`/`getStockName`
-      // si elles sont utilisées ailleurs ou pour la logique de filtrage/affichage.
-      const processedData: MarketItem[] = data.map((item: any) => ({
-        symbol: item.symbol,
-        name: item.type === 'crypto' ? getCryptoName(item.symbol) : getStockName(item.symbol),
-        price: item.price,
-        change24h: item.change24h,
-        marketCap: item.marketCap,
-        volume24h: item.volume24h,
-        type: item.type,
-      }));
-
-      if (processedData.length === 0) {
-        toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue de votre fonction Vercel.');
+      if (data.length === 0) {
+        toast.error('❌ Erreur de récupération des données du marché: Aucune donnée valide reçue.');
       } else {
-        setMarketData(processedData);
+        setMarketData(data);
         toast.success('Données du marché mises à jour via votre fonction Vercel !');
       }
 
     } catch (error: any) {
       console.error('Erreur globale de récupération des données du marché:', error);
-      toast.error(`❌ Erreur de récupération des données du marché: ${error.message}. Assurez-vous que votre fonction Vercel est déployée et fonctionne.`);
+      toast.error(`❌ Erreur de récupération des données du marché: ${error.message}.`);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Application des filtres
   useEffect(() => {
     let filtered = [...marketData];
 
@@ -145,16 +93,15 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       filtered = filtered.filter((item) => item.change24h < 0).sort((a, b) => a.change24h - b.change24h);
     }
 
-    if (isFreePlan) filtered = filtered.slice(0, 10); // Limite d'affichage pour le plan gratuit
+    if (isFreePlan) filtered = filtered.slice(0, 10);
 
     setFilteredData(filtered);
   }, [marketData, selectedType, searchTerm, selectedFilter, isFreePlan]);
 
-  // Rafraîchissement toutes les 60 secondes
   useEffect(() => {
-    fetchMarketData(); // Exécute une fois au montage
-    const interval = setInterval(() => fetchMarketData(), 60000); // Puis toutes les 60 secondes
-    return () => clearInterval(interval); // Nettoyage de l'intervalle au démontage
+    fetchMarketData();
+    const interval = setInterval(() => fetchMarketData(), 60000);
+    return () => clearInterval(interval);
   }, [fetchMarketData]);
 
   const handleUpgradeClick = () => {
@@ -163,7 +110,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -171,7 +117,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
               <Globe className="w-6 h-6 mr-3 text-blue-600" />
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aperçu du Marché</h2>
-                {/* Mettre à jour le texte pour refléter l'utilisation de la fonction Vercel */}
                 <p className="text-sm text-gray-600 dark:text-gray-400">Mise à jour en temps réel via votre fonction Vercel</p>
               </div>
             </div>
@@ -208,7 +153,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
             </div>
           )}
 
-          {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -244,7 +188,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
             </div>
           </div>
 
-          {/* Performance Filters */}
           <div className="flex space-x-2 mb-6">
             <Button
               onClick={() => setSelectedFilter('all')}
@@ -276,7 +219,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         </CardContent>
       </Card>
 
-      {/* Market Data */}
       {loading && filteredData.length === 0 ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
@@ -320,7 +262,7 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       ) : (
         <div className="space-y-4">
           {filteredData.map((item) => (
-            <Card key={item.symbol} hover className="transition-all duration-200">
+            <Card key={item.symbol} className="transition-all duration-200">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -331,7 +273,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
                           : 'bg-gradient-to-r from-blue-500 to-blue-600'
                       }`}
                     >
-                      {/* Utilisez le symbole court pour l'affichage */}
                       {item.symbol.slice(0, 3).toUpperCase()}
                     </div>
                     <div>
@@ -391,7 +332,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         </div>
       )}
 
-      {/* Premium Upgrade CTA */}
       {isFreePlan && marketData.length > 10 && (
         <Card>
           <CardContent className="p-6">
@@ -422,7 +362,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         </Card>
       )}
 
-      {/* Market Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardContent className="p-6 text-center">
