@@ -53,7 +53,9 @@ const fetchFreeCryptoData = async () => {
     console.error('La clé API FreeCrypto est manquante.');
     return [];
   }
-  const url = `https://freecrypto-api.example.com/api/v1/coins?key=${FREECRYPTO_API_KEY}`;
+
+  // URL RÉELLE DE L'API FREECRYPTO
+  const url = `https://api.freecryptoapi.com/v1/coins?key=${FREECRYPTO_API_KEY}`;
   try {
     const data = await fetchWithRetry(url);
     // Supposons que l'API retourne un tableau de cryptos avec 'symbol', 'name', 'price_usd', 'percent_change_24h', 'market_cap'
@@ -89,7 +91,7 @@ const fetchFinnhubData = async () => {
       const data = await fetchWithRetry(url);
       
       // Endpoint pour les profils de l'entreprise (pour le nom)
-      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHub_STOCKS_API_KEY}`;
+      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
       const profileData = await fetchWithRetry(profileUrl);
 
       stockData.push({
