@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
+import { Card, CardContent, CardHeader } from './ui/Card';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 import toast from 'react-hot-toast';
 
 // L'URL de votre fonction serverless Vercel
-const BACKEND_API_URL = '/api/market-data';
+const BACKEND_API_URL = '/api/market-data.cjs';
 
 interface MarketItem {
   symbol: string;
@@ -54,9 +54,9 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
       const response = await fetch(BACKEND_API_URL);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error(`Vercel API Function Error: Status ${response.status} - ${response.statusText}. Error:`, errorData.error);
-        throw new Error(`Erreur de récupération des données depuis votre fonction Vercel: ${errorData.error || response.statusText}`);
+        // Tente de lire le corps de l'erreur pour un meilleur message
+        const errorText = await response.text();
+        throw new Error(`Erreur de récupération des données depuis votre fonction Vercel: ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -66,7 +66,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         setMarketData(data);
         toast.success('Données du marché mises à jour via votre fonction Vercel !');
       }
-
     } catch (error: any) {
       console.error('Erreur globale de récupération des données du marché:', error);
       toast.error(`❌ Erreur de récupération des données du marché: ${error.message}.`);
