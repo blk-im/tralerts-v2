@@ -129,3 +129,8 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Échec de la récupération des données du marché.', message: error.message });
   }
 };
+```
+eof
+
+
+Dis-moi si tu as des questions pendant cette étape final
