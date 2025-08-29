@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
-import { Card, CardContent, CardHeader } from './ui/Card';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
+import { Card, CardContent, CardHeader } from '../../ui/Card';
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import toast from 'react-hot-toast';
 
 // L'URL de votre fonction serverless Vercel
@@ -407,3 +407,4 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
     </div>
   );
 }
+
