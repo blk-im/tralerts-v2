@@ -13,7 +13,7 @@
     "@supabase/supabase-js": "^2.38.4",
     "finnhub": "^2.0.7",
     "lucide-react": "^0.344.0",
-    "node-fetch": "^2.6.7",  <-- AJOUT CRUCIAL ICI
+    "node-fetch": "^2.6.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.48.2",
