@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/**/*.cjs": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/market-data",
+      "destination": "/api/market-data.cjs"
+    }
+  ]
+}
