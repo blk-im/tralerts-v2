@@ -1,136 +1,175 @@
-// Cette fonction serverless a été renommée en .cjs pour forcer Vercel à utiliser la syntaxe CommonJS.
-// Cela résout l'erreur de module 'exports is not defined'.
+// Cette fonction serverless récupère les données de marché (crypto et actions).
+// Elle utilise un cache double niveau pour optimiser les appels externes et la performance Vercel.
 
-const fetch = require('node-fetch'); // Utilisation de require pour le fetch
-const URLSearchParams = require('url').URLSearchParams;
+const fetch = require('node-fetch'); // Utilisation de require pour Node.js/CommonJS
+const URLSearchParams = require('url').URLSearchParams; // Module Node.js intégré
 
-// Récupération des clés d'API depuis les variables d'environnement Vercel
-const FREECRYPTO_API_KEY = process.env.FREECRYPTO_API_KEY;
-const FINNHUB_STOCKS_API_KEY = process.env.FINNHUB_STOCKS_API_KEY;
+// --- 1. Variables d'Environnement (CLÉS API MISES À JOUR) ---
+// La clé API pour les cryptomonnaies
+const FREECRYPTO_API_KEY = process.env.FREECRYPTO_API_KEY; 
+// La clé API pour les actions (Finnhub)
+const FINNHUB_API_KEY = process.env.FINNHUB_NEWS_API_KEY; // NOM DE LA CLÉ CORRIGÉ ICI
 
-// Définition des caches en mémoire avec un timestamp pour la validité
+// --- 2. Configuration du Cache en Mémoire ---
 let globalCache = {
-  data: null,
-  timestamp: 0,
+  data: null,
+  timestamp: 0,
 };
 let apiCache = {
-  data: null,
-  timestamp: 0,
+  data: null,
+  timestamp: 0,
 };
 
-const GLOBAL_CACHE_TTL = 30;
-const API_CACHE_TTL = 244;
+// Durées de vie des caches en secondes
+const GLOBAL_CACHE_TTL = 30; // Cache utilisé pour le frontend (le frontend appelle toutes les 30s)
+const API_CACHE_TTL = 244;  // Cache des données API externes (pour limiter les appels Finnhub/FreeCrypto)
 
+// --- 3. Fonctions Utilitaire ---
+
+// Fonction de récupération avec gestion des erreurs et réessais (Exponential Backoff)
 const fetchWithRetry = async (url, options = {}, retries = 3) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, options);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-      }
-      return await response.json();
-    } catch (error) {
-      console.error(`Erreur de fetch pour ${url}, tentative ${i + 1}/${retries}:`, error.message);
-      if (i < retries - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
-      } else {
-        throw error;
-      }
-    }
-  }
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        // Log l'erreur HTTP spécifique pour le débogage
+        console.error(`Erreur HTTP pour ${url}: ${response.status} - ${response.statusText}`);
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`Erreur de fetch pour ${url}, tentative ${i + 1}/${retries}:`, error.message);
+      if (i < retries - 1) {
+        // Attendre 1s, 2s, 4s... avant de réessayer
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      } else {
+        throw error; // Échec final
+      }
+    }
+  }
 };
+
+// --- 4. Fonctions de Récupération de Données Spécifiques ---
 
 const fetchFreeCryptoData = async () => {
-  if (!FREECRYPTO_API_KEY) {
-    console.error('La clé API FreeCrypto est manquante.');
-    return [];
-  }
-  const url = `https://api.freecryptoapi.com/v1/coins?key=${FREECRYPTO_API_KEY}`;
-  try {
-    const data = await fetchWithRetry(url);
-    return data.map(crypto => ({
-      symbol: crypto.symbol,
-      name: crypto.name,
-      price: crypto.price_usd,
-      change24h: crypto.percent_change_24h,
-      marketCap: crypto.market_cap,
-      type: 'crypto',
-    }));
-  } catch (error) {
-    console.error('Erreur de récupération des données FreeCrypto:', error);
-    return [];
-  }
+  if (!FREECRYPTO_API_KEY) {
+    console.error('La clé API FreeCrypto est manquante. Retourne un tableau vide.');
+    return [];
+  }
+  // URL FreeCrypto confirmée
+  const url = `https://api.freecryptoapi.com/v1/coins?key=${FREECRYPTO_API_KEY}`;
+  try {
+    const data = await fetchWithRetry(url);
+    // S'assurer que 'data' est un tableau avant de mapper
+    if (!Array.isArray(data)) {
+      console.error('Format de réponse FreeCrypto inattendu. Retourne un tableau vide.');
+      return [];
+    }
+    return data.map(crypto => ({
+      symbol: crypto.symbol,
+      name: crypto.name,
+      price: crypto.price_usd,
+      change24h: crypto.percent_change_24h,
+      marketCap: crypto.market_cap,
+      type: 'crypto',
+    }));
+  } catch (error) {
+    console.error('Erreur de récupération des données FreeCrypto. Retourne un tableau vide.', error);
+    return [];
+  }
 };
 
 const fetchFinnhubData = async () => {
-  if (!FINNHUB_STOCKS_API_KEY) {
-    console.error('La clé API Finnhub est manquante.');
-    return [];
-  }
-  const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
-  const stockData = [];
+  // Utilisation de la clé d'API corrigée
+  if (!FINNHUB_API_KEY) {
+    console.error('La clé API Finnhub est manquante. Retourne un tableau vide.');
+    return [];
+  }
+  const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
+  const stockData = [];
 
-  for (const symbol of stocks) {
-    try {
-      const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
-      const data = await fetchWithRetry(url);
-      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
-      const profileData = await fetchWithRetry(profileUrl);
-      stockData.push({
-        symbol: symbol,
-        name: profileData.name || symbol,
-        price: data.c,
-        change24h: data.dp,
-        marketCap: profileData.marketCapitalization,
-        volume24h: data.v,
-        type: 'stock',
-      });
-    } catch (error) {
-      console.error(`Erreur de récupération des données Finnhub pour ${symbol}:`, error);
-    }
-  }
-  return stockData;
+  for (const symbol of stocks) {
+    try {
+      // 1. Récupération des prix
+      const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`;
+      const quoteData = await fetchWithRetry(quoteUrl);
+      
+      // 2. Récupération des informations de profil (pour le nom et la market cap)
+      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_API_KEY}`;
+      const profileData = await fetchWithRetry(profileUrl);
+      
+      stockData.push({
+        symbol: symbol,
+        name: profileData.name || symbol,
+        price: quoteData.c, // Prix courant
+        change24h: quoteData.dp, // Changement en pourcentage
+        marketCap: profileData.marketCapitalization, // Capitalisation boursière
+        volume24h: quoteData.v, // Volume
+        type: 'stock',
+      });
+    } catch (error) {
+      console.error(`Erreur de récupération des données Finnhub pour ${symbol}.`, error);
+    }
+  }
+  return stockData;
 };
+
+// --- 5. Logique de Cache API (Niveau 2) ---
 
 const fetchDataAndCache = async () => {
-  const currentTime = Date.now();
-  if (currentTime - apiCache.timestamp < API_CACHE_TTL * 1000) {
-    console.log('Utilisation du cache API existant.');
-    return apiCache.data;
-  }
-  console.log('Cache API expiré, récupération de nouvelles données...');
-  const [cryptoData, stockData] = await Promise.all([
-    fetchFreeCryptoData(),
-    fetchFinnhubData(),
-  ]);
+  const currentTime = Date.now();
+  // Vérifie si le cache des API externes est encore valide
+  if (currentTime - apiCache.timestamp < API_CACHE_TTL * 1000) {
+    console.log('Utilisation du cache API (244s) existant. Pas de requêtes externes.');
+    return apiCache.data;
+  }
+  console.log('Cache API (244s) expiré, récupération de nouvelles données externes...');
 
-  const combinedData = [...cryptoData, ...stockData];
-  apiCache.data = combinedData;
-  apiCache.timestamp = currentTime;
+  // Lance les deux récupérations d'API en parallèle
+  const [cryptoData, stockData] = await Promise.all([
+    fetchFreeCryptoData(),
+    fetchFinnhubData(),
+  ]);
 
-  return combinedData;
+  const combinedData = [...cryptoData, ...stockData].filter(item => item.price !== undefined); // Filtrer les entrées sans prix valide
+  apiCache.data = combinedData;
+  apiCache.timestamp = currentTime;
+
+  return combinedData;
 };
 
-// Handler de la fonction serverless Vercel en CommonJS
+// --- 6. Handler de la Fonction Serverless (Niveau 1 - Cache Global) ---
+
 module.exports = async function handler(req, res) {
-  const currentTime = Date.now();
-  if (currentTime - globalCache.timestamp < GLOBAL_CACHE_TTL * 1000) {
-    console.log('Cache global valide, renvoi des données.');
-    return res.status(200).json(globalCache.data);
-  }
-  console.log('Cache global expiré, récupération des données via fetchDataAndCache.');
-  try {
-    const data = await fetchDataAndCache();
-    globalCache.data = data;
-    globalCache.timestamp = currentTime;
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error('Erreur fatale dans le handler:', error);
-    return res.status(500).json({ error: 'Échec de la récupération des données du marché.', message: error.message });
-  }
+  // S'assurer que seule la méthode GET est autorisée
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method Not Allowed', message: 'Seules les requêtes GET sont acceptées sur cette API.' });
+  }
+  
+  const currentTime = Date.now();
+  
+  // Vérifie si le cache global (30s) est encore valide
+  if (currentTime - globalCache.timestamp < GLOBAL_CACHE_TTL * 1000) {
+    console.log('Cache global (30s) valide, renvoi des données instantané.');
+    // Envoie la réponse du cache global
+    return res.status(200).json(globalCache.data);
+  }
+  
+  console.log('Cache global (30s) expiré, exécution de fetchDataAndCache...');
+  
+  try {
+    // Récupère les données (cela va soit utiliser le cache API de 244s, soit appeler les API externes)
+    const data = await fetchDataAndCache();
+    
+    // Met à jour le cache global (30s) avec les données fraîches
+    globalCache.data = data;
+    globalCache.timestamp = currentTime;
+    
+    // Renvoie les données
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error('Erreur fatale dans le handler de la fonction Vercel:', error);
+    // En cas d'échec total (les deux caches sont invalides et les API ne répondent pas)
+    return res.status(500).json({ error: 'Échec de la récupération des données du marché.', message: error.message });
+  }
 };
-```
-eof
-
-
-Dis-moi si tu as des questions pendant cette étape final
