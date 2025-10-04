@@ -2,8 +2,8 @@
   "name": "crypto-alerts-platform",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
-  "engines": {
+
+ "engines": {
     "node": "22.x"
   },
   "scripts": {
