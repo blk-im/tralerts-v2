@@ -1,4 +1,3 @@
-@@ -1,411 +1,41 @@
 import { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
