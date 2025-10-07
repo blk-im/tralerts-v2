@@ -6,86 +6,105 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const CACHE_TTL_SECONDS = 30;
+// -- Config --
+const CACHE_TTL_SECONDS_CRYPTO = 17;
+const CACHE_TTL_SECONDS_STOCK = 30;
 const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
-const cryptos = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'SOLUSDT']; // Binance symbols
 
+// Helper pour cache
 function getCacheKey(type, symbol) {
   return `${type.toUpperCase()}-${symbol.toUpperCase()}`;
 }
 
-async function fetchAndCachePrices() {
+// --- CRYPTOS (DEXScreener Trending) ---
+async function fetchTrendingCryptos() {
+  const url = `https://api.dexscreener.com/latest/dex/tokens/trending`;
+  const resp = await fetch(url);
+  const json = await resp.json();
+  return json.pairs || [];
+}
+
+async function fetchAndCacheCryptoPrices() {
+  let cryptos = [];
   let results = [];
 
-  // ---- CRYPTOS (Binance + cache Supabase) ----
-  for (const symbol of cryptos) {
-    const type = 'CRYPTO';
-    const cacheKey = getCacheKey(type, symbol);
+  try {
+    cryptos = await fetchTrendingCryptos();
+  } catch (err) {
+    cryptos = [];
+  }
 
-    // 1. Tenter le cache
+  // Pour limiter l'affichage (modifie le slice si besoin)
+  for (const token of cryptos.slice(0, 50)) {
+    // Nom du token (normalisation)
+    const symbol =
+      token.baseToken && token.baseToken.symbol
+        ? token.baseToken.symbol
+        : token.token && token.token.symbol
+        ? token.token.symbol
+        : null;
+    if (!symbol) continue;
+    const cacheKey = getCacheKey('CRYPTO', symbol);
+
+    // Essai cache Supabase
     let cachedData = null;
     try {
       const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
       if (data) cachedData = data;
-    } catch (err) {
-      console.error('SUPABASE CACHE error (get)', symbol, err);
-    }
+    } catch {}
 
     if (cachedData) {
-      results.push({ symbol, type, ...cachedData });
+      results.push({ ...cachedData, type: 'CRYPTO', symbol, name: token.baseToken.name });
       continue;
     }
 
-    // 2. Si pas le cache, fetch Binance
-    let item = { symbol, type };
-    try {
-      const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`;
-      const resp = await fetch(url);
-      const data = await resp.json();
-      console.log('DEBUG BINANCE', symbol, data);
+    // Compose la data
+    const priceUsd = token.priceUsd || null;
+    const change24h = token.priceChange && token.priceChange.h24;
+    const volume24h = token.volume && token.volume.h24;
+    const marketCap = token.marketCap || null;
+    const name = token.baseToken.name || symbol;
 
-      if (data && data.lastPrice) {
-        item.price = parseFloat(data.lastPrice);
-        item.change24h = parseFloat(data.priceChangePercent);
-        item.volume24h = parseFloat(data.volume);
-        item.marketCap = null;
-        // 3. Stocker dans le cache
-        try {
-          await supabase.rpc('set_market_price_cache', {
-            cache_key: cacheKey,
-            price_data: {
-              price: item.price,
-              change24h: item.change24h,
-              marketCap: null,
-              volume24h: item.volume24h
-            },
-            cache_duration_seconds: CACHE_TTL_SECONDS,
-          });
-        } catch (err) {
-          console.error('SUPABASE CACHE error (set)', symbol, err);
-        }
-      } else {
-        item.error = 'No data found';
-      }
-    } catch (err) {
-      console.error('CRYPTO fetch error', symbol, err);
-      item.error = 'No data found';
-    }
+    const item = {
+      symbol,
+      name,
+      type: 'CRYPTO',
+      price: priceUsd ? parseFloat(priceUsd) : null,
+      change24h: change24h ? parseFloat(change24h) : null,
+      volume24h: volume24h ? parseFloat(volume24h) : null,
+      marketCap: marketCap ? parseFloat(marketCap) : null,
+      chainId: token.chainId,
+      dexId: token.dexId,
+      url: token.url
+    };
+
+    try {
+      await supabase.rpc('set_market_price_cache', {
+        cache_key: cacheKey,
+        price_data: item,
+        cache_duration_seconds: CACHE_TTL_SECONDS_CRYPTO,
+      });
+    } catch {}
+
     results.push(item);
   }
 
-  // ---- STOCKS (Finnhub + cache Supabase) ----
+  return results;
+}
+
+// --- STOCKS (Finnhub + cache Supabase) ---
+async function fetchAndCacheStockPrices() {
+  let results = [];
   for (const symbol of stocks) {
     const type = 'STOCK';
     const cacheKey = getCacheKey(type, symbol);
 
+    // Essai cache Supabase
     let cachedData = null;
     try {
       const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
       if (data) cachedData = data;
-    } catch (err) {
-      console.error('SUPABASE CACHE error (get-stocks)', symbol, err);
-    }
+    } catch {}
 
     if (cachedData) {
       results.push({ symbol, type, ...cachedData });
@@ -107,9 +126,8 @@ async function fetchAndCachePrices() {
         marketCap: profile.marketCapitalization || null,
         volume: quote.v
       };
-    } catch (err) {
+    } catch {
       priceData = null;
-      console.error('STOCK fetch error', symbol, err);
     }
 
     if (priceData) {
@@ -117,29 +135,29 @@ async function fetchAndCachePrices() {
         await supabase.rpc('set_market_price_cache', {
           cache_key: cacheKey,
           price_data: priceData,
-          cache_duration_seconds: CACHE_TTL_SECONDS,
+          cache_duration_seconds: CACHE_TTL_SECONDS_STOCK,
         });
-      } catch (err) {
-        console.error('SUPABASE CACHE error (set-stocks)', symbol, err);
-      }
+      } catch {}
       results.push({ symbol, type, ...priceData });
     } else {
       results.push({ symbol, type, error: 'No data found' });
     }
   }
-
   return results;
 }
 
-// Handler Vercel API
+// --- Handler API ---
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Méthode non autorisée.' });
   }
 
   try {
-    const allPrices = await fetchAndCachePrices();
-    res.status(200).json(allPrices);
+    const [cryptoPrices, stockPrices] = await Promise.all([
+      fetchAndCacheCryptoPrices(),
+      fetchAndCacheStockPrices()
+    ]);
+    res.status(200).json([...cryptoPrices, ...stockPrices]);
   } catch (error) {
     console.error('Erreur fatale backend:', error);
     res.status(500).json({ error: 'Échec backend', message: error.message });
