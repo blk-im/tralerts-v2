@@ -9,18 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const CACHE_TTL_SECONDS = 30;
 const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
-const cryptos = [
-  '$AI',      // source: bitget
-  '$ALT',     // source: bitget
-  '$DEGEN',   // source: bitget
-  '0G',       // source: binance
-  '1000CAT',  // source: binance
-  '1000CHEEMS',// source: binance
-  '1000SATS', // source: binance
-  '10SET',    // source: gateio
-  '1CAT',     // source: gateio
-  '1DOLLAR'   // source: gateio
-];
+const cryptos = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT'];
 
 const getCacheKey = (type, symbol) => `${type.toUpperCase()}-${symbol.toUpperCase()}`;
 
