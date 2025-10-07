@@ -1,66 +1,75 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
-const FREECRYPTO_API_KEY = process.env.FREECRYPTOAPI_KEY;
 const FINNHUB_STOCKS_API_KEY = process.env.FINNHUB_STOCKS_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Cache TTL en secondes (30s conseillé)
 const CACHE_TTL_SECONDS = 30;
-const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
-const cryptos = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT'];
 
-const getCacheKey = (type, symbol) => `${type.toUpperCase()}-${symbol.toUpperCase()}`;
+const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
+const cryptos = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'SOLUSDT']; // Symboles Binance
+
+function getCacheKey(type, symbol) {
+  return `${type.toUpperCase()}-${symbol.toUpperCase()}`;
+}
 
 async function fetchAndCachePrices() {
   let results = [];
-  const cryptoSymbols = cryptos.join('+');
-  let cryptoDataRaw = null;
-  try {
-    const cryptoCacheKey = 'CRYPTO-BATCH';
-    let { data: cachedCryptoBatch } = await supabase.rpc('get_market_price_from_cache', { cache_key: cryptoCacheKey });
-    if (cachedCryptoBatch) {
-      cryptoDataRaw = cachedCryptoBatch;
-    } else {
-      const url = `https://api.freecryptoapi.com/v1/getData?symbol=${cryptoSymbols}`;
-      const resp = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${FREECRYPTO_API_KEY}` }
-      });
-      cryptoDataRaw = await resp.json();
-      console.log("RAW FreeCryptoAPI:", cryptoDataRaw);
-      await supabase.rpc('set_market_price_cache', {
-        cache_key: cryptoCacheKey,
-        price_data: cryptoDataRaw,
-        cache_duration_seconds: CACHE_TTL_SECONDS,
-      });
-    }
-  } catch (err) {
-    cryptoDataRaw = null;
-  }
 
-  // Extraction des cryptos
-  if (cryptoDataRaw && cryptoDataRaw.symbols && Array.isArray(cryptoDataRaw.symbols)) {
-    for (const symbol of cryptos) {
-      let item = { symbol, type: 'CRYPTO' };
-      const symbolData = cryptoDataRaw.symbols.find((c) => c.symbol?.toUpperCase() === symbol.toUpperCase());
-      if (symbolData) {
-        item.price = symbolData.price_usd ?? null;
-        item.marketCap = symbolData.market_cap ?? null;
-        item.volume24h = symbolData.volume_24h ?? null;
-        item.change24h = symbolData.percent_change_24h ?? null;
+  // ---- CRYPTOS (Binance + Cache Supabase) ----
+  for (const symbol of cryptos) {
+    const type = 'CRYPTO';
+    const cacheKey = getCacheKey(type, symbol);
+
+    let cachedData = null;
+    try {
+      const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
+      if (data) cachedData = data;
+    } catch (err) {}
+
+    if (cachedData) {
+      results.push({ symbol, type, ...cachedData });
+      continue;
+    }
+
+    // Si pas le cache, fetch Binance
+    let item = { symbol, type };
+    try {
+      const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+
+      if (data.lastPrice) {
+        item.price = parseFloat(data.lastPrice);
+        item.change24h = parseFloat(data.priceChangePercent);
+        item.volume24h = parseFloat(data.volume);
+        item.marketCap = null;
+        // Stock cache
+        try {
+          await supabase.rpc('set_market_price_cache', {
+            cache_key: cacheKey,
+            price_data: {
+              price: item.price,
+              change24h: item.change24h,
+              marketCap: null,
+              volume24h: item.volume24h
+            },
+            cache_duration_seconds: CACHE_TTL_SECONDS,
+          });
+        } catch (err) {}
       } else {
         item.error = 'No data found';
       }
-      results.push(item);
+    } catch (err) {
+      item.error = 'No data found';
     }
-  } else {
-    for (const symbol of cryptos) {
-      results.push({ symbol, type: 'CRYPTO', error: 'No data found' });
-    }
+    results.push(item);
   }
 
-  // Actions (Finnhub)
+  // ---- STOCKS (Finnhub + Cache Supabase) ----
   for (const symbol of stocks) {
     const type = 'STOCK';
     const cacheKey = getCacheKey(type, symbol);
@@ -69,7 +78,7 @@ async function fetchAndCachePrices() {
     try {
       const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
       if (data) cachedData = data;
-    } catch (err) { }
+    } catch (err) {}
 
     if (cachedData) {
       results.push({ symbol, type, ...cachedData });
@@ -103,7 +112,7 @@ async function fetchAndCachePrices() {
           price_data: priceData,
           cache_duration_seconds: CACHE_TTL_SECONDS,
         });
-      } catch (err) { }
+      } catch (err) {}
       results.push({ symbol, type, ...priceData });
     } else {
       results.push({ symbol, type, error: 'No data found' });
