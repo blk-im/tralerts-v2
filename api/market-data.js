@@ -30,8 +30,11 @@ async function fetchAndCacheCryptoPrices() {
 
   try {
     cryptos = await fetchTrendingCryptos();
+    // LOG DEBUG TOUTE LA LISTE DES CRYPTOS RECUPEREES
+    console.log("DEBUG DEXSCREENER cryptos", cryptos);
   } catch (err) {
     cryptos = [];
+    console.error("DEBUG DEXSCREENER erreur fetch", err);
   }
 
   // Pour limiter l'affichage (modifie le slice si besoin)
@@ -157,6 +160,8 @@ module.exports = async function handler(req, res) {
       fetchAndCacheCryptoPrices(),
       fetchAndCacheStockPrices()
     ]);
+    // LOG DEBUG REPONSE COMPLETE
+    console.log("DEBUG /api/market-data final", [...cryptoPrices, ...stockPrices]);
     res.status(200).json([...cryptoPrices, ...stockPrices]);
   } catch (error) {
     console.error('Erreur fatale backend:', error);
