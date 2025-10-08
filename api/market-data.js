@@ -1,6 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
-
+//
 const FINNHUB_STOCKS_API_KEY = process.env.FINNHUB_STOCKS_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
