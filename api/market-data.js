@@ -1,13 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
-//
+
+const CRYPTOAPIS_KEY = process.env.CRYPTOAPIS_KEY; // Stocké côté Vercel
 const FINNHUB_STOCKS_API_KEY = process.env.FINNHUB_STOCKS_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // -- Config --
-const CACHE_TTL_SECONDS_CRYPTO = 17;
+const CACHE_TTL_SECONDS_CRYPTO = 26;
 const CACHE_TTL_SECONDS_STOCK = 30;
 const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
 
@@ -16,12 +17,14 @@ function getCacheKey(type, symbol) {
   return `${type.toUpperCase()}-${symbol.toUpperCase()}`;
 }
 
-// --- CRYPTOS (DEXScreener Trending) ---
+// --- CRYPTOS (CryptoAPIs) ---
 async function fetchTrendingCryptos() {
-  const url = `https://api.dexscreener.com/latest/dex/tokens/trending`;
-  const resp = await fetch(url);
+  const url = `https://rest.cryptoapis.io/market-data/assets?limit=50`;
+  const resp = await fetch(url, {
+    headers: { "X-API-Key": CRYPTOAPIS_KEY }
+  });
   const json = await resp.json();
-  return json.pairs || [];
+  return (json.data && json.data.items) ? json.data.items : [];
 }
 
 async function fetchAndCacheCryptoPrices() {
@@ -30,24 +33,17 @@ async function fetchAndCacheCryptoPrices() {
 
   try {
     cryptos = await fetchTrendingCryptos();
-    // LOG DEBUG TOUTE LA LISTE DES CRYPTOS RECUPEREES
-    console.log("DEBUG DEXSCREENER cryptos", cryptos);
+    console.log("DEBUG CRYPTOAPIS cryptos", cryptos);
   } catch (err) {
     cryptos = [];
-    console.error("DEBUG DEXSCREENER erreur fetch", err);
+    console.error("DEBUG CRYPTOAPIS erreur fetch", err);
   }
 
-  // Pour limiter l'affichage (modifie le slice si besoin)
-  for (const token of cryptos.slice(0, 50)) {
-    // Nom du token (normalisation)
-    const symbol =
-      token.baseToken && token.baseToken.symbol
-        ? token.baseToken.symbol
-        : token.token && token.token.symbol
-        ? token.token.symbol
-        : null;
+  for (const tkn of cryptos) {
+    const symbol = tkn.assetSymbol || tkn.symbol || null;
+    const name = tkn.assetName || tkn.name || symbol;
     if (!symbol) continue;
-    const cacheKey = getCacheKey('CRYPTO', symbol);
+    const cacheKey = getCacheKey('crypto', symbol);
 
     // Essai cache Supabase
     let cachedData = null;
@@ -57,28 +53,27 @@ async function fetchAndCacheCryptoPrices() {
     } catch {}
 
     if (cachedData) {
-      results.push({ ...cachedData, type: 'CRYPTO', symbol, name: token.baseToken.name });
+      results.push({ ...cachedData, type: 'crypto', symbol, name });
       continue;
     }
 
-    // Compose la data
-    const priceUsd = token.priceUsd || null;
-    const change24h = token.priceChange && token.priceChange.h24;
-    const volume24h = token.volume && token.volume.h24;
-    const marketCap = token.marketCap || null;
-    const name = token.baseToken.name || symbol;
+    // Champs principaux CryptoAPIs standardisés
+    const priceUsd = tkn.assetLatestRate && tkn.assetLatestRate.rate ? +tkn.assetLatestRate.rate : null;
+    const marketCap = tkn.marketCapUsd || tkn.assetMarketCapUsd || null;
+    const volume24h = tkn.assetVolumeLast24h || tkn.volume24h || null;
+    const change24h = tkn.assetLatestRate && tkn.assetLatestRate.percentChange24h
+      ? +tkn.assetLatestRate.percentChange24h
+      : null;
 
     const item = {
       symbol,
       name,
-      type: 'CRYPTO',
-      price: priceUsd ? parseFloat(priceUsd) : null,
-      change24h: change24h ? parseFloat(change24h) : null,
-      volume24h: volume24h ? parseFloat(volume24h) : null,
-      marketCap: marketCap ? parseFloat(marketCap) : null,
-      chainId: token.chainId,
-      dexId: token.dexId,
-      url: token.url
+      type: 'crypto',
+      price: priceUsd,
+      change24h,
+      volume24h,
+      marketCap,
+      // Ajoute ici d'autres infos si dispo (platform, url, assetType, etc)
     };
 
     try {
@@ -95,14 +90,13 @@ async function fetchAndCacheCryptoPrices() {
   return results;
 }
 
-// --- STOCKS (Finnhub + cache Supabase) ---
+// --- STOCKS (Finnhub + cache Supabase, inchangé) ---
 async function fetchAndCacheStockPrices() {
   let results = [];
   for (const symbol of stocks) {
-    const type = 'STOCK';
+    const type = 'stock';
     const cacheKey = getCacheKey(type, symbol);
 
-    // Essai cache Supabase
     let cachedData = null;
     try {
       const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
@@ -160,8 +154,6 @@ module.exports = async function handler(req, res) {
       fetchAndCacheCryptoPrices(),
       fetchAndCacheStockPrices()
     ]);
-    // LOG DEBUG REPONSE COMPLETE
-    console.log("DEBUG /api/market-data final", [...cryptoPrices, ...stockPrices]);
     res.status(200).json([...cryptoPrices, ...stockPrices]);
   } catch (error) {
     console.error('Erreur fatale backend:', error);
