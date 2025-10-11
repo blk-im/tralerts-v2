@@ -11,14 +11,17 @@ const CACHE_TTL_SECONDS_CRYPTO = 26;
 const CACHE_TTL_SECONDS_STOCK = 30;
 const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
 
-// Liste des top cryptos à récupérer (remplace l'endpoint de liste)
-const TOP_CRYPTOS = ['BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'SOL', 'DOT', 'AVAX', 'SHIB', 'LTC', 'TRX', 'UNI', 'ATOM', 'ETC', 'LINK', 'XMR', 'BCH', 'XLM'];
+// Liste des top cryptos à récupérer
+const TOP_CRYPTOS = [
+  'BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'SOL', 'DOT', 'AVAX',
+  'SHIB', 'LTC', 'TRX', 'UNI', 'ATOM', 'ETC', 'LINK', 'XMR', 'BCH', 'XLM'
+];
 
 function getCacheKey(type, symbol) {
   return `${type.toUpperCase()}-${symbol.toUpperCase()}`;
 }
 
-// NOUVELLE MÉTHODE : Récupérer asset par asset
+// -- CRYPTOS (nouvelle méthode asset par asset) --
 async function fetchCryptoAssetDetails(symbol) {
   const url = `https://rest.cryptoapis.io/v2/assets/${symbol}`;
   const resp = await fetch(url, {
@@ -56,7 +59,7 @@ async function fetchAndCacheCryptoPrices() {
     }
 
     try {
-      // Récupération des détails + taux de change
+      // Détail asset + taux USD
       const [assetDetails, exchangeRate] = await Promise.all([
         fetchCryptoAssetDetails(symbol),
         fetchCryptoExchangeRate(symbol)
@@ -65,7 +68,7 @@ async function fetchAndCacheCryptoPrices() {
       if (!assetDetails || !exchangeRate) continue;
 
       const specificData = assetDetails.specificData || {};
-      
+
       const item = {
         symbol,
         name: assetDetails.name,
@@ -76,7 +79,6 @@ async function fetchAndCacheCryptoPrices() {
         marketCap: specificData['marketCapInUSD'] ? parseFloat(specificData['marketCapInUSD']) : null,
       };
 
-      // Cache
       try {
         await supabase.rpc('set_market_price_cache', {
           cache_key: cacheKey,
@@ -94,11 +96,60 @@ async function fetchAndCacheCryptoPrices() {
   return results;
 }
 
-// Le reste (stocks) reste identique...
+// --- STOCKS (Finnhub + cache Supabase, inchangé) ---
 async function fetchAndCacheStockPrices() {
-  // ... même code qu'avant
+  let results = [];
+  for (const symbol of stocks) {
+    const type = 'stock';
+    const cacheKey = getCacheKey(type, symbol);
+
+    let cachedData = null;
+    try {
+      const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
+      if (data) cachedData = data;
+    } catch {}
+
+    if (cachedData) {
+      results.push({ symbol, type, ...cachedData });
+      continue;
+    }
+
+    let priceData = null;
+    try {
+      const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
+      const quoteResp = await fetch(quoteUrl);
+      const quote = await quoteResp.json();
+      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
+      const profileResp = await fetch(profileUrl);
+      const profile = await profileResp.json();
+
+      priceData = {
+        price: quote.c,
+        change24h: quote.dp,
+        marketCap: profile.marketCapitalization || null,
+        volume: quote.v
+      };
+    } catch {
+      priceData = null;
+    }
+
+    if (priceData) {
+      try {
+        await supabase.rpc('set_market_price_cache', {
+          cache_key: cacheKey,
+          price_data: priceData,
+          cache_duration_seconds: CACHE_TTL_SECONDS_STOCK,
+        });
+      } catch {}
+      results.push({ symbol, type, ...priceData });
+    } else {
+      results.push({ symbol, type, error: 'No data found' });
+    }
+  }
+  return results;
 }
 
+// --- Handler API ---
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Méthode non autorisée.' });
