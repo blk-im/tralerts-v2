@@ -13,14 +13,37 @@ const TOP_CRYPTOS = [
   'SHIB', 'LTC', 'TRX', 'UNI', 'ATOM', 'ETC', 'LINK', 'XMR', 'BCH', 'XLM'
 ];
 
-function getCacheKey(symbol) {
-  return `CRYPTO-${symbol.toUpperCase()}`;
-}
-
 // LOG: clé utilisée
 console.log('CRYPTOAPIS_KEY:', CRYPTOAPIS_KEY && CRYPTOAPIS_KEY.slice(0,8)+"...");
 
-// --- LOGGÉ À CHAQUE APPEL CRYPTO ---
+// Fonctions utilitaires pour le cache Supabase TABLE crypto
+async function getCryptoCache(symbol) {
+  const { data, error } = await supabase
+    .from('market_price_cache_crypto')
+    .select('*')
+    .eq('symbol', symbol)
+    .single();
+  if (error) console.log(`[CACHE ERROR] ${symbol}:`, error.message);
+  // Vérifie la fraîcheur: si la ligne existe et < TTL, retourne le cache
+  if (data && data.updated_at) {
+    const updatedAt = new Date(data.updated_at).getTime();
+    const now = Date.now();
+    if (now - updatedAt < CACHE_TTL_SECONDS_CRYPTO * 1000) {
+      console.log(`[CACHE HIT] ${symbol}:`, data);
+      return data;
+    }
+  }
+  return null;
+}
+
+async function setCryptoCache(row) {
+  row.updated_at = new Date().toISOString();
+  const { error } = await supabase
+    .from('market_price_cache_crypto')
+    .upsert([row], { onConflict: ['symbol'] });
+  if (error) console.log(`[CACHE WRITE ERROR] ${row.symbol}:`, error.message);
+}
+
 async function fetchCryptoAssetDetails(symbol) {
   const url = `https://rest.cryptoapis.io/v2/assets/${symbol}`;
   console.log(`APPEL api details: ${url}`);
@@ -50,20 +73,7 @@ module.exports = async function handler(req, res) {
 
   let results = [];
   for (const symbol of TOP_CRYPTOS) {
-    const cacheKey = getCacheKey(symbol);
-
-    // LOG: vérification du cache
-    console.log('[CACHE] Recherche pour:', cacheKey);
-    let cachedData = null;
-    try {
-      const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
-      if (data) { 
-        cachedData = data; 
-        console.log(`[CACHE HIT] ${symbol}:`, data);
-      }
-    } catch (err) {
-      console.log(`[CACHE ERROR] ${symbol}:`, err.message || err);
-    }
+    let cachedData = await getCryptoCache(symbol);
 
     if (cachedData) {
       results.push({ ...cachedData, type: 'crypto', symbol });
@@ -91,18 +101,8 @@ module.exports = async function handler(req, res) {
         type: 'crypto'
       };
 
-      // LOG: data envoyée dans le cache
       console.log(`[CACHE SET] ${symbol}:`, item);
-
-      try {
-        await supabase.rpc('set_market_price_cache', {
-          cache_key: cacheKey,
-          price_data: item,
-          cache_duration_seconds: CACHE_TTL_SECONDS_CRYPTO,
-        });
-      } catch (err) {
-        console.log(`[CACHE WRITE ERROR] ${symbol}:`, err.message || err);
-      }
+      await setCryptoCache(item);
 
       results.push(item);
     } catch (error) {
