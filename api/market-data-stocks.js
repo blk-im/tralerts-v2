@@ -58,6 +58,7 @@ module.exports = async function handler(req, res) {
       const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
       const profileResp = await fetch(profileUrl);
       const profile = await profileResp.json();
+      console.log(`[Finnhub] ${symbol} profile.marketCapitalization:`, profile.marketCapitalization);
 
       let realMarketCap = null;
       if (typeof profile.marketCapitalization === 'number') {
