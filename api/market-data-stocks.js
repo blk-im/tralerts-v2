@@ -60,17 +60,23 @@ module.exports = async function handler(req, res) {
       const profile = await profileResp.json();
 
       // Correction marketCap: Finnhub renvoie en milliards USD (billions)
-      let realMarketCap = null;
-      if (typeof profile.marketCapitalization === 'number') {
-        realMarketCap = profile.marketCapitalization * 1_000_000_000;
-      }
+     let realMarketCap = null;
+// Si la valeur est < 100_000 (à adapter selon ce que tu observes), on suppose que c’est en milliards
+if (typeof profile.marketCapitalization === 'number') {
+  if (profile.marketCapitalization < 100_000) {
+    realMarketCap = profile.marketCapitalization * 1_000_000_000;
+  } else {
+    realMarketCap = profile.marketCapitalization;
+  }
+}
 
-      priceData = {
-        price: quote.c,
-        change24h: quote.dp,
-        marketCap: realMarketCap,
-        volume: quote.v
-      };
+priceData = {
+  price: quote.c,
+  change24h: quote.dp,
+  marketCap: realMarketCap,
+  volume: quote.v
+};
+
     } catch (err) {
       priceData = null;
       console.log(`[API ERROR] ${symbol}:`, err && err.message || err);
