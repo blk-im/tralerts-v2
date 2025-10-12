@@ -347,7 +347,12 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
                   {item.marketCap !== undefined && (
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Market Cap</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">${formatLargeNumber(item.marketCap)}</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+  {typeof item.marketCap === "string"
+    ? item.marketCap
+    : `$${formatLargeNumber(item.marketCap)}`}
+</p>
+
                     </div>
                   )}
                   {item.volume24h !== undefined && (
