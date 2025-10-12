@@ -59,23 +59,29 @@ module.exports = async function handler(req, res) {
       const profileResp = await fetch(profileUrl);
       const profile = await profileResp.json();
 
-      // Correction marketCap: Finnhub renvoie en milliards USD (billions)
-     let realMarketCap = null;
-// Si la valeur est < 100_000 (à adapter selon ce que tu observes), on suppose que c’est en milliards
-if (typeof profile.marketCapitalization === 'number') {
-  if (profile.marketCapitalization < 100_000) {
-    realMarketCap = profile.marketCapitalization * 1_000_000_000;
-  } else {
-    realMarketCap = profile.marketCapitalization;
-  }
-}
+      // Nouvelle logique marketCap : string "54.7M" => "54.7 Milliards", nombre => adaptation auto
+      let realMarketCap = null;
+      if (typeof profile.marketCapitalization === 'number') {
+        if (profile.marketCapitalization < 100_000) {
+          realMarketCap = profile.marketCapitalization * 1_000_000_000;
+        } else {
+          realMarketCap = profile.marketCapitalization;
+        }
+      } else if (typeof profile.marketCapitalization === 'string') {
+        const match = profile.marketCapitalization.match(/^([\d.]+)M$/);
+        if (match) {
+          realMarketCap = `${match[1]} Milliards`;
+        } else {
+          realMarketCap = profile.marketCapitalization;
+        }
+      }
 
-priceData = {
-  price: quote.c,
-  change24h: quote.dp,
-  marketCap: realMarketCap,
-  volume: quote.v
-};
+      priceData = {
+        price: quote.c,
+        change24h: quote.dp,
+        marketCap: realMarketCap,
+        volume: quote.v
+      };
 
     } catch (err) {
       priceData = null;
