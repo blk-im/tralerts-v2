@@ -9,15 +9,14 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const CACHE_TTL_SECONDS_STOCK = 30;
 const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
 
-// Fonctions utilitaires pour cache Supabase TABLE stock
 async function getStockCache(symbol) {
   const { data, error } = await supabase
     .from('market_price_cache_stock')
     .select('*')
     .eq('symbol', symbol)
     .single();
+
   if (error) console.log(`[CACHE ERROR] ${symbol}:`, error.message);
-  // Vérifie la fraîcheur: si la ligne existe et < TTL, retourne le cache
   if (data && data.updated_at) {
     const updatedAt = new Date(data.updated_at).getTime();
     const now = Date.now();
@@ -60,10 +59,16 @@ module.exports = async function handler(req, res) {
       const profileResp = await fetch(profileUrl);
       const profile = await profileResp.json();
 
+      // Correction marketCap: Finnhub renvoie en milliards USD (billions)
+      let realMarketCap = null;
+      if (typeof profile.marketCapitalization === 'number') {
+        realMarketCap = profile.marketCapitalization * 1_000_000_000;
+      }
+
       priceData = {
         price: quote.c,
         change24h: quote.dp,
-        marketCap: profile.marketCapitalization || null,
+        marketCap: realMarketCap,
         volume: quote.v
       };
     } catch (err) {
