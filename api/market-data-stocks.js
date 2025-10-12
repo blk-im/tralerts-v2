@@ -59,7 +59,6 @@ module.exports = async function handler(req, res) {
       const profileResp = await fetch(profileUrl);
       const profile = await profileResp.json();
 
-      // Nouvelle logique marketCap : string "54.7M" => "54.7 Milliards", nombre => adaptation auto
       let realMarketCap = null;
       if (typeof profile.marketCapitalization === 'number') {
         if (profile.marketCapitalization < 100_000) {
