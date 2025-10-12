@@ -36,6 +36,21 @@ async function setStockCache(row) {
   if (error) console.log(`[CACHE WRITE ERROR] ${row.symbol}:`, error.message);
 }
 
+function formatMarketCap(value) {
+  // La donnée Finnhub est en millions
+  if (value >= 1_000_000) {
+    return (value / 1_000_000).toFixed(2) + " Trilliards";
+  } else if (value >= 1_000) {
+    return (value / 1_000).toFixed(2) + " Milliards";
+  } else if (value >= 1) {
+    return value.toFixed(2) + " Millions";
+  } else if (value >= 0.1) {
+    return (value * 1_000).toFixed(2) + " Centaines de milliers";
+  } else {
+    return (value * 1_000_000).toFixed(2);
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Méthode non autorisée.' });
@@ -58,19 +73,18 @@ module.exports = async function handler(req, res) {
       const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_STOCKS_API_KEY}`;
       const profileResp = await fetch(profileUrl);
       const profile = await profileResp.json();
+
       console.log(`[Finnhub] ${symbol} profile.marketCapitalization:`, profile.marketCapitalization);
 
       let realMarketCap = null;
       if (typeof profile.marketCapitalization === 'number') {
-        if (profile.marketCapitalization < 100_000) {
-          realMarketCap = profile.marketCapitalization * 1_000_000_000;
-        } else {
-          realMarketCap = profile.marketCapitalization;
-        }
+        realMarketCap = formatMarketCap(profile.marketCapitalization);
       } else if (typeof profile.marketCapitalization === 'string') {
+        // S'il y a un cas genre "54.7M"
         const match = profile.marketCapitalization.match(/^([\d.]+)M$/);
         if (match) {
-          realMarketCap = `${match[1]} Milliards`;
+          const value = parseFloat(match[1]);
+          realMarketCap = formatMarketCap(value);
         } else {
           realMarketCap = profile.marketCapitalization;
         }
