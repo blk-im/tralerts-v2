@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, Search, Filter, Globe, Zap, Crown, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -31,6 +31,10 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'gainers' | 'losers'>('all');
   const [isFreePlan] = useState(true);
 
+  // Pour tracking d’erreur API
+  const [cryptoError, setCryptoError] = useState<string | null>(null);
+  const [stockError, setStockError] = useState<string | null>(null);
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -49,16 +53,39 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
 
   const fetchMarketData = useCallback(async () => {
     setLoading(true);
+    setCryptoError(null); setStockError(null);
+
     try {
       const [cryptoRes, stockRes] = await Promise.all([
         fetch(CRYPTO_API_URL),
         fetch(STOCK_API_URL),
       ]);
-      const cryptoData = cryptoRes.ok ? await cryptoRes.json() : [];
-      const stockData = stockRes.ok ? await stockRes.json() : [];
+      let cryptoData: MarketItem[] = [];
+      let stockData: MarketItem[] = [];
+
+      if (cryptoRes.ok) {
+        cryptoData = await cryptoRes.json();
+        if (!Array.isArray(cryptoData) || cryptoData.length === 0) {
+          setCryptoError("Aucune donnée crypto disponible — vérifiez votre backend/quotas.");
+        }
+      } else {
+        setCryptoError(`Erreur API crypto : ${cryptoRes.statusText}`);
+      }
+
+      if (stockRes.ok) {
+        stockData = await stockRes.json();
+        if (!Array.isArray(stockData) || stockData.length === 0) {
+          setStockError("Aucune donnée actions disponible — vérifiez le backend ou la clé API.");
+        }
+      } else {
+        setStockError(`Erreur API actions : ${stockRes.statusText}`);
+      }
+
       setMarketData([...cryptoData, ...stockData]);
       toast.success('Données du marché mises à jour!');
     } catch (error: any) {
+      setCryptoError("Erreur de récupération des données du marché.");
+      setStockError("Erreur de récupération des données du marché.");
       toast.error(`Erreur récupération: ${error.message}`);
     } finally {
       setLoading(false);
@@ -117,6 +144,21 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
           </div>
         </CardHeader>
         <CardContent>
+          {cryptoError && (
+            <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-2 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <span className="text-red-800 dark:text-red-200 text-sm font-bold">Crypto :</span>
+              <span className="text-red-700 dark:text-red-300 text-sm">{cryptoError}</span>
+            </div>
+          )}
+          {stockError && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-2 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <span className="text-yellow-800 dark:text-yellow-200 text-sm font-bold">Actions :</span>
+              <span className="text-yellow-700 dark:text-yellow-300 text-sm">{stockError}</span>
+            </div>
+          )}
+
           {isFreePlan && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
               <div className="flex items-center justify-between mb-2">
