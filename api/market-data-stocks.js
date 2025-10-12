@@ -9,8 +9,32 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const CACHE_TTL_SECONDS_STOCK = 30;
 const stocks = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'];
 
-function getCacheKey(symbol) {
-  return `STOCK-${symbol}`;
+// Fonctions utilitaires pour cache Supabase TABLE stock
+async function getStockCache(symbol) {
+  const { data, error } = await supabase
+    .from('market_price_cache_stock')
+    .select('*')
+    .eq('symbol', symbol)
+    .single();
+  if (error) console.log(`[CACHE ERROR] ${symbol}:`, error.message);
+  // Vérifie la fraîcheur: si la ligne existe et < TTL, retourne le cache
+  if (data && data.updated_at) {
+    const updatedAt = new Date(data.updated_at).getTime();
+    const now = Date.now();
+    if (now - updatedAt < CACHE_TTL_SECONDS_STOCK * 1000) {
+      console.log(`[CACHE HIT] ${symbol}:`, data);
+      return data;
+    }
+  }
+  return null;
+}
+
+async function setStockCache(row) {
+  row.updated_at = new Date().toISOString();
+  const { error } = await supabase
+    .from('market_price_cache_stock')
+    .upsert([row], { onConflict: ['symbol'] });
+  if (error) console.log(`[CACHE WRITE ERROR] ${row.symbol}:`, error.message);
 }
 
 module.exports = async function handler(req, res) {
@@ -20,13 +44,7 @@ module.exports = async function handler(req, res) {
 
   let results = [];
   for (const symbol of stocks) {
-    const cacheKey = getCacheKey(symbol);
-
-    let cachedData = null;
-    try {
-      const { data } = await supabase.rpc('get_market_price_from_cache', { cache_key: cacheKey });
-      if (data) cachedData = data;
-    } catch {}
+    let cachedData = await getStockCache(symbol);
 
     if (cachedData) {
       results.push({ symbol, type: 'stock', ...cachedData });
@@ -48,18 +66,13 @@ module.exports = async function handler(req, res) {
         marketCap: profile.marketCapitalization || null,
         volume: quote.v
       };
-    } catch {
+    } catch (err) {
       priceData = null;
+      console.log(`[API ERROR] ${symbol}:`, err && err.message || err);
     }
 
     if (priceData) {
-      try {
-        await supabase.rpc('set_market_price_cache', {
-          cache_key: cacheKey,
-          price_data: priceData,
-          cache_duration_seconds: CACHE_TTL_SECONDS_STOCK,
-        });
-      } catch {}
+      await setStockCache({ symbol, ...priceData });
       results.push({ symbol, type: 'stock', ...priceData });
     } else {
       results.push({ symbol, type: 'stock', error: 'No data found' });
