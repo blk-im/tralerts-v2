@@ -13,7 +13,7 @@ interface MarketItem {
   name: string;
   price: number;
   change24h: number;
-  marketCap?: number;
+  marketCap?: number | string;
   volume24h?: number;
   type: 'crypto' | 'stock';
 }
@@ -31,7 +31,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'gainers' | 'losers'>('all');
   const [isFreePlan] = useState(true);
 
-  // Pour tracking d’erreur API
   const [cryptoError, setCryptoError] = useState<string | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
 
@@ -125,6 +124,10 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
   const handleUpgradeClick = () => {
     if (onPremiumUpgrade) onPremiumUpgrade();
   };
+
+  // Séparation
+  const cryptoData = filteredData.filter(item => item.type === 'crypto');
+  const stockData = filteredData.filter(item => item.type === 'stock');
 
   return (
     <div className="space-y-6">
@@ -252,121 +255,181 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
         </CardContent>
       </Card>
 
-      {loading && filteredData.length === 0 ? (
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="animate-pulse">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <div className="flex justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-xl"></div>
-                    <div className="space-y-2">
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
+      {/* MARKET CRYPTO SECTION */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-xl font-semibold text-orange-700 dark:text-orange-300">Marché Crypto</h2>
+        </CardHeader>
+        <CardContent>
+          {cryptoData.length === 0 ? (
+            <p className="text-gray-500">Aucune crypto affichée.</p>
+          ) : (
+            cryptoData.map((item) => (
+              <Card key={item.symbol} className="transition-all duration-200 mb-2">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white bg-gradient-to-r from-orange-500 to-orange-600">
+                        {item.symbol.slice(0, 3).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">{item.symbol.toUpperCase()}</h3>
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                            CRYPTO
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{item.name}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-2 text-right">
-                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-24 ml-auto"></div>
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16 ml-auto"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : filteredData.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Filter className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Aucun résultat trouvé</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Essayez de modifier vos filtres ou votre recherche.</p>
-            <Button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedType('all');
-                setSelectedFilter('all');
-              }}
-              variant="secondary"
-            >
-              Réinitialiser les filtres
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filteredData.map((item) => (
-            <Card key={item.symbol} className="transition-all duration-200">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white ${
-                        item.type === 'crypto'
-                          ? 'bg-gradient-to-r from-orange-500 to-orange-600'
-                          : 'bg-gradient-to-r from-blue-500 to-blue-600'
-                      }`}
-                    >
-                      {item.symbol.slice(0, 3).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">{item.symbol.toUpperCase()}</h3>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            item.type === 'crypto'
-                              ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
-                              : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                          }`}
-                        >
-                          {item.type === 'crypto' ? 'CRYPTO' : 'ACTION'}
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(item.price)}</p>
+                      <div className={`flex items-center justify-end ${item.change24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.change24h >= 0 ? (
+                          <TrendingUp className="w-3 h-3 mr-1" />
+                        ) : (
+                          <TrendingDown className="w-3 h-3 mr-1" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {item.change24h >= 0 ? '+' : ''}
+                          {item.change24h.toFixed(2)}%
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{item.name}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(item.price)}</p>
-                    <div
-                      className={`flex items-center justify-end ${
-                        item.change24h >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}
-                    >
-                      {item.change24h >= 0 ? (
-                        <TrendingUp className="w-3 h-3 mr-1" />
-                      ) : (
-                        <TrendingDown className="w-3 h-3 mr-1" />
-                      )}
-                      <span className="text-sm font-medium">
-                        {item.change24h >= 0 ? '+' : ''}
-                        {item.change24h.toFixed(2)}%
-                      </span>
-                    </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    {item.marketCap !== undefined && (
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Market Cap</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          {typeof item.marketCap === "string"
+                            ? item.marketCap
+                            : `$${formatLargeNumber(item.marketCap)}`}
+                        </p>
+                      </div>
+                    )}
+                    {item.volume24h !== undefined && (
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Volume 24h</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">${formatLargeNumber(item.volume24h)}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  {item.marketCap !== undefined && (
-                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Market Cap</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-  {typeof item.marketCap === "string"
-    ? item.marketCap
-    : `$${formatLargeNumber(item.marketCap)}`}
-</p>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
+      {/* MARKET STOCK SECTION */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Marché Actions</h2>
+        </CardHeader>
+        <CardContent>
+          {stockData.length === 0 ? (
+            <p className="text-gray-500">Aucune action affichée.</p>
+          ) : (
+            stockData.map((item) => (
+              <Card key={item.symbol} className="transition-all duration-200 mb-2">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600">
+                        {item.symbol.slice(0, 3).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">{item.symbol.toUpperCase()}</h3>
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                            ACTION
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{item.name}</p>
+                      </div>
                     </div>
-                  )}
-                  {item.volume24h !== undefined && (
-                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Volume 24h</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">${formatLargeNumber(item.volume24h)}</p>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(item.price)}</p>
+                      <div className={`flex items-center justify-end ${item.change24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.change24h >= 0 ? (
+                          <TrendingUp className="w-3 h-3 mr-1" />
+                        ) : (
+                          <TrendingDown className="w-3 h-3 mr-1" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {item.change24h >= 0 ? '+' : ''}
+                          {item.change24h.toFixed(2)}%
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    {item.marketCap !== undefined && (
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Market Cap</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          {typeof item.marketCap === "string"
+                            ? item.marketCap
+                            : `$${formatLargeNumber(item.marketCap)}`}
+                        </p>
+                      </div>
+                    )}
+                    {item.volume24h !== undefined && (
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Volume 24h</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">${formatLargeNumber(item.volume24h)}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+              <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+            <p className="text-2xl font-bold text-green-600">
+              {marketData.filter(item => item.change24h > 0).length}
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Actifs en hausse
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+              <TrendingDown className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+            <p className="text-2xl font-bold text-red-600">
+              {marketData.filter(item => item.change24h < 0).length}
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Actifs en baisse
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+              <RefreshCw className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <p className="text-2xl font-bold text-blue-600">
+              60s
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Fréquence de mise à jour
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       {isFreePlan && marketData.length > 10 && (
         <Card>
@@ -397,50 +460,6 @@ export function MarketOverview({ onPremiumUpgrade }: MarketOverviewProps) {
           </CardContent>
         </Card>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="p-6 text-center">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
-              <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-            <p className="text-2xl font-bold text-green-600">
-              {marketData.filter(item => item.change24h > 0).length}
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Actifs en hausse
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6 text-center">
-            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
-              <TrendingDown className="w-6 h-6 text-red-600 dark:text-red-400" />
-            </div>
-            <p className="text-2xl font-bold text-red-600">
-              {marketData.filter(item => item.change24h < 0).length}
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Actifs en baisse
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6 text-center">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
-              <RefreshCw className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <p className="text-2xl font-bold text-blue-600">
-              60s
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Fréquence de mise à jour
-            </p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
