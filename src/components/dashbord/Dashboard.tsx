@@ -9,7 +9,6 @@ import { MarketCrypto } from './MarketCrypto';
 import { UserSettings } from './UserSettings';
 import { TechnicalAnalysis } from './TechnicalAnalysis';
 import { SocialTrading } from './SocialTrading';
-// L'importation a été corrigée pour utiliser l'exportation par défaut.
 import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
@@ -34,21 +33,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   const handleCreateAlert = async (data: AlertFormData) => {
     setCreateLoading(true);
     try {
-      // Vérifier si la table alerts existe
-      // Note: `supabase` n'est pas défini ici. Il faudra s'assurer qu'il est importé et configuré.
-      // Pour l'instant, nous commentons ce bloc pour éviter une nouvelle erreur.
-      /*
-      const { error: tableCheckError } = await supabase
-        .from('alerts')
-        .select('count(*)', { count: 'exact', head: true });
-      
-      if (tableCheckError) {
-        console.error('Error checking alerts table:', tableCheckError);
-        toast.error('Erreur de base de données. Veuillez configurer Supabase correctement.');
-        throw tableCheckError;
-      }
-      */
-      
       const { error } = await createAlert({
         symbol: data.market_type === 'stock' ? data.symbol.toUpperCase() : data.symbol.toLowerCase(),
         target_price: data.target_price,
@@ -71,7 +55,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
         );
       }
     } catch (error) {
-      // L'erreur est déjà gérée ci-dessus
       throw error;
     } finally {
       setCreateLoading(false);
@@ -79,7 +62,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   };
 
   const handleDeleteAlert = async (alertId: string) => {
-    // Remplacé confirm() par un toast pour éviter les blocages
     toast((t) => (
       <div>
         <p className="text-gray-900 dark:text-white">Êtes-vous sûr de vouloir supprimer cette alerte ?</p>
@@ -140,11 +122,10 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     }
   };
 
-  // Get unique symbols for charts
   const uniqueSymbols = [...new Set(alerts.map(alert => ({
     symbol: alert.symbol,
     marketType: alert.market_type
-  })))].slice(0, 2); // Réduire à 2 pour mobile pour éviter le chevauchement
+  })))].slice(0, 2);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
@@ -156,7 +137,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
       />
       
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
-        {/* Header Section - Plus compact */}
         <div className="mb-3 sm:mb-6">
           <h2 className="text-lg sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">
             Dashboard
@@ -166,9 +146,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
           </p>
         </div>
 
-        {/* Mobile Layout: Stacked - Optimisé */}
         <div className="lg:hidden space-y-3 sm:space-y-4">
-          {/* Create Alert Form - Plus compact sur mobile */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
             <CreateAlertForm
               onSubmit={handleCreateAlert}
@@ -177,7 +155,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             />
           </div>
 
-          {/* Navigation Tabs - Scrollable horizontal */}
           <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-1 overflow-x-auto">
             <div className="flex space-x-1 min-w-max">
               {[
@@ -206,7 +183,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             </div>
           </div>
 
-          {/* Mobile Tab Content - Optimisé pour réduire le scroll */}
           <div className="min-h-[60vh]">
             {activeTab === 'alerts' && (
               <div className="space-y-3">
@@ -238,7 +214,12 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             )}
 
             {activeTab === 'portfolio' && <Portfolio onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'market' && <MarketOverview />}
+            {activeTab === 'market' && (
+              <>
+                <MarketStock />
+                <MarketCrypto />
+              </>
+            )}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'social' && <SocialTrading onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
@@ -248,9 +229,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
           </div>
         </div>
 
-        {/* Desktop Layout: Sidebar + Main Content - Inchangé */}
         <div className="hidden lg:grid lg:grid-cols-12 lg:gap-6 xl:gap-8">
-          {/* Sidebar - Create Alert Form */}
           <div className="lg:col-span-4 xl:col-span-3">
             <div className="sticky top-4">
               <CreateAlertForm
@@ -261,9 +240,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             </div>
           </div>
 
-          {/* Main Content */}
           <div className="lg:col-span-8 xl:col-span-9 space-y-6 sm:space-y-8">
-            {/* Navigation Tabs - Desktop */}
             <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 overflow-x-auto">
               {[
                 { key: 'alerts', label: 'Mes Alertes' },
@@ -290,7 +267,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
               ))}
             </div>
 
-            {/* Desktop Tab Content */}
             {activeTab === 'alerts' && (
               <div className="space-y-6 sm:space-y-8">
                 {uniqueSymbols.length > 0 && (
@@ -320,7 +296,12 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             )}
 
             {activeTab === 'portfolio' && <Portfolio onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'market' && <MarketOverview />}
+            {activeTab === 'market' && (
+              <>
+                <MarketStock />
+                <MarketCrypto />
+              </>
+            )}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'social' && <SocialTrading onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
