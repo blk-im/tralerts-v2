@@ -219,4 +219,50 @@ export function MarketStock() {
                   {item.volume!==undefined && (
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Volume 24h</p>
-                      <p className
+                      <p className="font-semibold text-gray-900 dark:text-white">${formatLargeNumber(Number(item.volume))}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Infos stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <TrendingUp className="w-6 h-6 text-green-600" />
+            </div>
+            <p className="text-2xl font-bold text-green-600">
+              {data.filter((item) => item.change24h > 0).length}
+            </p>
+            <p className="text-sm text-gray-600">Actions en hausse</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <TrendingDown className="w-6 h-6 text-red-600" />
+            </div>
+            <p className="text-2xl font-bold text-red-600">
+              {data.filter((item) => item.change24h < 0).length}
+            </p>
+            <p className="text-sm text-gray-600">Actions en baisse</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <RefreshCw className="w-6 h-6 text-blue-600" />
+            </div>
+            <p className="text-2xl font-bold text-blue-600">60s</p>
+            <p className="text-sm text-gray-600">Fréquence de mise à jour</p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
