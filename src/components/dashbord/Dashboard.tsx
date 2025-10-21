@@ -27,7 +27,9 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   const { user } = useAuth();
   const { alerts, loading, createAlert, deleteAlert, toggleAlert } = useAlerts(user?.id);
   const [createLoading, setCreateLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'alerts' | 'portfolio' | 'market' | 'analysis' | 'social' | 'news' | 'watchlist' | 'performance' | 'settings'>('alerts');
+  const [activeTab, setActiveTab] = useState<
+    'alerts' | 'portfolio' | 'marketStock' | 'marketCrypto' | 'analysis' | 'social' | 'news' | 'watchlist' | 'performance' | 'settings'
+  >('alerts');
   const { showNotification } = useNotification();
 
   const handleCreateAlert = async (data: AlertFormData) => {
@@ -45,7 +47,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
       if (error) {
         console.error('Error creating alert:', error);
         toast.error('Erreur lors de la création de l\'alerte');
-        throw error; // Propager l'erreur pour éviter l'incrémentation du compteur
+        throw error;
       } else {
         const symbol = data.market_type === 'stock' ? data.symbol.toUpperCase() : data.symbol.toLowerCase();
         toast.success(`Alerte créée pour ${symbol} ! Surveillance toutes les 5 secondes.`);
@@ -127,6 +129,20 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     marketType: alert.market_type
   })))].slice(0, 2);
 
+  // Liste des tabs (mobile et desktop), version avec marketStock, marketCrypto séparés
+  const TABS = [
+    { key: 'alerts', label: 'Alertes' },
+    { key: 'news', label: 'News' },
+    { key: 'portfolio', label: 'Portfolio' },
+    { key: 'marketStock', label: 'Marché Actions' },
+    { key: 'marketCrypto', label: 'Marché Crypto' },
+    { key: 'analysis', label: 'Analyses' },
+    { key: 'social', label: 'Social' },
+    { key: 'watchlist', label: 'Watchlist' },
+    { key: 'performance', label: 'Perf.' },
+    { key: 'settings', label: 'Paramètres' }
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       <Header
@@ -135,7 +151,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
         onGoHome={onGoHome}
         onPremiumUpgrade={handlePremiumUpgrade}
       />
-      
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
         <div className="mb-3 sm:mb-6">
           <h2 className="text-lg sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">
@@ -146,6 +161,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
           </p>
         </div>
 
+        {/* Mobile layout */}
         <div className="lg:hidden space-y-3 sm:space-y-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
             <CreateAlertForm
@@ -154,20 +170,10 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
               onPremiumUpgrade={handlePremiumUpgrade}
             />
           </div>
-
+          {/* Navigation Tabs */}
           <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-1 overflow-x-auto">
             <div className="flex space-x-1 min-w-max">
-              {[
-                { key: 'alerts', label: 'Alertes' },
-                { key: 'news', label: 'News' },
-                { key: 'portfolio', label: 'Portfolio' },
-                { key: 'market', label: 'Marché' },
-                { key: 'analysis', label: 'Analyses' },
-                { key: 'social', label: 'Social' },
-                { key: 'watchlist', label: 'Watchlist' },
-                { key: 'performance', label: 'Perf.' },
-                { key: 'settings', label: 'Paramètres' }
-              ].map((tab) => (
+              {TABS.map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as any)}
@@ -182,7 +188,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
               ))}
             </div>
           </div>
-
+          {/* Tab content mobile */}
           <div className="min-h-[60vh]">
             {activeTab === 'alerts' && (
               <div className="space-y-3">
@@ -203,7 +209,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                     </div>
                   </div>
                 )}
-                
                 <AlertsList
                   alerts={alerts}
                   loading={loading}
@@ -212,14 +217,9 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                 />
               </div>
             )}
-
             {activeTab === 'portfolio' && <Portfolio onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'market' && (
-              <>
-                <MarketStock />
-                <MarketCrypto />
-              </>
-            )}
+            {activeTab === 'marketStock' && <MarketStock />}
+            {activeTab === 'marketCrypto' && <MarketCrypto />}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'social' && <SocialTrading onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
@@ -229,6 +229,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
           </div>
         </div>
 
+        {/* Desktop layout */}
         <div className="hidden lg:grid lg:grid-cols-12 lg:gap-6 xl:gap-8">
           <div className="lg:col-span-4 xl:col-span-3">
             <div className="sticky top-4">
@@ -239,20 +240,9 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
               />
             </div>
           </div>
-
           <div className="lg:col-span-8 xl:col-span-9 space-y-6 sm:space-y-8">
             <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 overflow-x-auto">
-              {[
-                { key: 'alerts', label: 'Mes Alertes' },
-                { key: 'portfolio', label: 'Portfolio' },
-                { key: 'market', label: 'Marché' },
-                { key: 'analysis', label: 'Analyses' },
-                { key: 'social', label: 'Social' },
-                { key: 'news', label: 'News' },
-                { key: 'watchlist', label: 'Watchlist' },
-                { key: 'performance', label: 'Performance' },
-                { key: 'settings', label: 'Paramètres' }
-              ].map((tab) => (
+              {TABS.map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as any)}
@@ -266,7 +256,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                 </button>
               ))}
             </div>
-
+            {/* Tab content desktop */}
             {activeTab === 'alerts' && (
               <div className="space-y-6 sm:space-y-8">
                 {uniqueSymbols.length > 0 && (
@@ -285,7 +275,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                     </div>
                   </div>
                 )}
-                
                 <AlertsList
                   alerts={alerts}
                   loading={loading}
@@ -294,14 +283,9 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                 />
               </div>
             )}
-
             {activeTab === 'portfolio' && <Portfolio onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'market' && (
-              <>
-                <MarketStock />
-                <MarketCrypto />
-              </>
-            )}
+            {activeTab === 'marketStock' && <MarketStock />}
+            {activeTab === 'marketCrypto' && <MarketCrypto />}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'social' && <SocialTrading onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
