@@ -7,7 +7,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const CACHE_TTL_SECONDS = 7; // Cache de 60 secondes
+const CACHE_TTL_SECONDS = 60; // Cache de 60 secondes
 const CACHE_ID = 'crypto_top_100'; // ID unique pour le cache global
 
 module.exports = async function handler(req, res) {
