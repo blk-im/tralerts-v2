@@ -8,7 +8,6 @@ import { MarketStock } from './MarketStock';
 import { MarketCrypto } from './MarketCrypto';
 import { UserSettings } from './UserSettings';
 import { TechnicalAnalysis } from './TechnicalAnalysis';
-import { SocialTrading } from './SocialTrading';
 import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
@@ -28,7 +27,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   const { alerts, loading, createAlert, deleteAlert, toggleAlert } = useAlerts(user?.id);
   const [createLoading, setCreateLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'alerts' | 'portfolio' | 'marketStock' | 'marketCrypto' | 'analysis' | 'social' | 'news' | 'watchlist' | 'performance' | 'settings'
+    'alerts' | 'portfolio' | 'marketStock' | 'marketCrypto' | 'analysis' | 'news' | 'watchlist' | 'performance' | 'settings'
   >('alerts');
   const { showNotification } = useNotification();
 
@@ -117,7 +116,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
           'Portfolio illimité',
           'Support prioritaire 24/7',
           'Analyses techniques avancées',
-          'Social trading complet'
         ]
       };
       onPremiumUpgrade(premiumPlan);
@@ -129,7 +127,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     marketType: alert.market_type
   })))].slice(0, 2);
 
-  // Liste des tabs (mobile et desktop), version avec marketStock, marketCrypto séparés
+  // Liste des tabs (mobile et desktop)
   const TABS = [
     { key: 'alerts', label: 'Alertes' },
     { key: 'news', label: 'News' },
@@ -137,7 +135,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     { key: 'marketStock', label: 'Marché Actions' },
     { key: 'marketCrypto', label: 'Marché Crypto' },
     { key: 'analysis', label: 'Analyses' },
-    { key: 'social', label: 'Social' },
     { key: 'watchlist', label: 'Watchlist' },
     { key: 'performance', label: 'Perf.' },
     { key: 'settings', label: 'Paramètres' }
@@ -221,7 +218,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             {activeTab === 'marketStock' && <MarketStock />}
             {activeTab === 'marketCrypto' && <MarketCrypto />}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'social' && <SocialTrading onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'watchlist' && <WatchlistManager onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'performance' && <PerformanceAnalytics onPremiumUpgrade={handlePremiumUpgrade} />}
@@ -287,7 +283,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             {activeTab === 'marketStock' && <MarketStock />}
             {activeTab === 'marketCrypto' && <MarketCrypto />}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'social' && <SocialTrading onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'watchlist' && <WatchlistManager onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'performance' && <PerformanceAnalytics onPremiumUpgrade={handlePremiumUpgrade} />}
