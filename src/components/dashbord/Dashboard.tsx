@@ -3,7 +3,6 @@ import { Header } from './Header';
 import { CreateAlertForm, AlertFormData } from './CreateAlertForm';
 import { AlertsList } from './AlertsList';
 import { PriceChart } from './PriceChart';
-import { Portfolio } from './Portfolio';
 import { MarketStock } from './MarketStock';
 import { MarketCrypto } from './MarketCrypto';
 import { UserSettings } from './UserSettings';
@@ -26,7 +25,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   const { alerts, loading, createAlert, deleteAlert, toggleAlert } = useAlerts(user?.id);
   const [createLoading, setCreateLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'alerts' | 'portfolio' | 'marketStock' | 'marketCrypto' | 'analysis' | 'news' | 'watchlist' | 'settings'
+    'alerts' | 'marketStock' | 'marketCrypto' | 'analysis' | 'news' | 'watchlist' | 'settings'
   >('alerts');
   const { showNotification } = useNotification();
 
@@ -112,7 +111,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
         features: [
           'Alertes illimitées',
           'SMS internationaux inclus',
-          'Portfolio illimité',
           'Support prioritaire 24/7',
           'Analyses techniques avancées',
         ]
@@ -130,7 +128,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   const TABS = [
     { key: 'alerts', label: 'Alertes' },
     { key: 'news', label: 'News' },
-    { key: 'portfolio', label: 'Portfolio' },
     { key: 'marketStock', label: 'Marché Actions' },
     { key: 'marketCrypto', label: 'Marché Crypto' },
     { key: 'analysis', label: 'Analyses' },
@@ -212,7 +209,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                 />
               </div>
             )}
-            {activeTab === 'portfolio' && <Portfolio onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'marketStock' && <MarketStock />}
             {activeTab === 'marketCrypto' && <MarketCrypto />}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
@@ -276,7 +272,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
                 />
               </div>
             )}
-            {activeTab === 'portfolio' && <Portfolio onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'marketStock' && <MarketStock />}
             {activeTab === 'marketCrypto' && <MarketCrypto />}
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
