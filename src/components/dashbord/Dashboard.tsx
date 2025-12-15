@@ -10,7 +10,6 @@ import { UserSettings } from './UserSettings';
 import { TechnicalAnalysis } from './TechnicalAnalysis';
 import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
-import { PerformanceAnalytics } from './PerformanceAnalytics';
 import { useAlerts } from '../../hooks/useAlerts';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -27,7 +26,7 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
   const { alerts, loading, createAlert, deleteAlert, toggleAlert } = useAlerts(user?.id);
   const [createLoading, setCreateLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'alerts' | 'portfolio' | 'marketStock' | 'marketCrypto' | 'analysis' | 'news' | 'watchlist' | 'performance' | 'settings'
+    'alerts' | 'portfolio' | 'marketStock' | 'marketCrypto' | 'analysis' | 'news' | 'watchlist' | 'settings'
   >('alerts');
   const { showNotification } = useNotification();
 
@@ -136,7 +135,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
     { key: 'marketCrypto', label: 'Marché Crypto' },
     { key: 'analysis', label: 'Analyses' },
     { key: 'watchlist', label: 'Watchlist' },
-    { key: 'performance', label: 'Perf.' },
     { key: 'settings', label: 'Paramètres' }
   ];
 
@@ -220,7 +218,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'watchlist' && <WatchlistManager onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'performance' && <PerformanceAnalytics onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'settings' && <UserSettings />}
           </div>
         </div>
@@ -285,7 +282,6 @@ export function Dashboard({ onGoHome, onSignOut, onPremiumUpgrade }: DashboardPr
             {activeTab === 'analysis' && <TechnicalAnalysis onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'news' && <NewsCenter onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'watchlist' && <WatchlistManager onPremiumUpgrade={handlePremiumUpgrade} />}
-            {activeTab === 'performance' && <PerformanceAnalytics onPremiumUpgrade={handlePremiumUpgrade} />}
             {activeTab === 'settings' && <UserSettings />}
           </div>
         </div>
