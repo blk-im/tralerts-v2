@@ -11,6 +11,7 @@ import { TechnicalAnalysis } from './TechnicalAnalysis';
 import { SocialTrading } from './SocialTrading';
 import NewsCenter from './NewsCenter';
 import { WatchlistManager } from './WatchlistManager';
+import { PerformanceAnalytics } from './PerformanceAnalytics';
 import { useAlerts } from '../../hooks/useAlerts';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../contexts/NotificationContext';
