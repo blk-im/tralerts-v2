@@ -87,11 +87,11 @@ export default async function handler(req, res) {
     // 4. Fetch Binance (prix temps réel)
     isFetching = true;
 
-  const symbolsList = TOP_100.map(s => `"${s}USDT"`).join(',');
- const binanceResponse = await fetch(
-  `https://api.binance.com/api/v3/ticker/24hr?symbols=[${symbolsList}]`
- );
-
+    const symbolsList = TOP_100.map(s => `"${s}USDT"`).join(',');
+    const encodedSymbols = encodeURIComponent(`[${symbolsList}]`);
+    const binanceResponse = await fetch(
+      `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodedSymbols}`
+    );
 
     if (!binanceResponse.ok) {
       isFetching = false;
